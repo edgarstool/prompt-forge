@@ -59,9 +59,50 @@ prompt-forge/
 
 ## 目前狀態
 
-**Foundation / 產品地基建立中。**
+**Local pipeline 可跑（EDG-342）。**
 
-先定義產品要解決什麼、如何從設計走到交付，再進入可執行原型。
+已有確定性本地閉環：intent → risk → route → context policy → compose → evaluate。
+四個最小案例與 CLI / unittest 可在本機反覆驗證。尚未做對外服務化。
+
+詳細 I/O 與指令：`docs/LOCAL-PIPELINE.md`。
+
+## 本地快速開始（Windows PowerShell）
+
+```powershell
+cd V:\projects\prompt-forge
+$env:PYTHONPATH = "$PWD\src"
+
+# 各階段輸入輸出契約
+python -m prompt_forge io
+
+# 跑四個最小案例
+python -m prompt_forge eval
+
+# 單次組裝 + 顯示 Prompt
+python -m prompt_forge run --request "幫我把這個資料夾整理好。" --show-prompt
+
+# 單元測試
+python -m unittest discover -s tests -v
+
+# 或用 helper
+.\scripts\run-local.ps1 eval
+.\scripts\run-local.ps1 test
+```
+
+### 目錄對應
+
+```text
+prompt-forge/
+├─ docs/                 # 產品設計 + LOCAL-PIPELINE
+├─ src/prompt_forge/     # 可執行 pipeline（stdlib）
+├─ prompts/              # 模板說明
+├─ routers/              # 路由規則說明
+├─ evaluators/           # 評估檢查說明
+├─ examples/cases/       # 最小案例 A–D
+├─ tests/                # unittest
+├─ adapters/             # Context7 policy note（尚未接網路）
+└─ scripts/run-local.ps1
+```
 
 ## 專案角色
 

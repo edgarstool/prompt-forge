@@ -1,0 +1,18 @@
+{
+  "id": "case_c",
+  "title": "GitHub repo 修復",
+  "input": {
+    "request": "幫我修好這個 repo，測試完開 PR。",
+    "preferred_agent": null,
+    "known_context": ["Repository is already cloned for the coding agent."],
+    "constraints": ["不要直接 merge 到 main/master"]
+  },
+  "expected": {
+    "task_type": "coding",
+    "recommended_agent": "codex",
+    "use_context7": true,
+    "risk_level": "medium",
+    "min_score": 8,
+    "must_pass": true
+  }
+}
