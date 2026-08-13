@@ -1,0 +1,18 @@
+{
+  "id": "case_b",
+  "title": "免費 VM 研究",
+  "input": {
+    "request": "幫我找現在還能用的免費 VM 和 credits。",
+    "preferred_agent": null,
+    "known_context": [],
+    "constraints": ["只要免費或試用額度，不要綁付費方案當預設"]
+  },
+  "expected": {
+    "task_type": "research",
+    "recommended_agent": "chatgpt",
+    "use_context7": false,
+    "risk_level": "low",
+    "min_score": 8,
+    "must_pass": true
+  }
+}

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prompt-forge"
+version = "0.1.0"
+description = "Local Prompt Forge pipeline: classify, route, compose, evaluate."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Edgar (王世鈞)" }]
+
+[project.scripts]
+prompt-forge = "prompt_forge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

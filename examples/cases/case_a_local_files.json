@@ -1,0 +1,18 @@
+{
+  "id": "case_a",
+  "title": "本機資料夾整理",
+  "input": {
+    "request": "幫我把這個資料夾整理好。",
+    "preferred_agent": null,
+    "known_context": ["Target folder will be provided to the local agent."],
+    "constraints": ["不要大量刪除原檔"]
+  },
+  "expected": {
+    "task_type": "local-files",
+    "recommended_agent": "hermes-local",
+    "use_context7": false,
+    "risk_level": "low",
+    "min_score": 8,
+    "must_pass": true
+  }
+}
