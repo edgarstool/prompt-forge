@@ -44,16 +44,19 @@ class PromptForgeServiceTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["service"], "prompt-forge")
 
-    def test_compile_returns_pipeline_artifact(self) -> None:
+    def test_compile_returns_pipeline_artifact_and_preserves_traditional_chinese(self) -> None:
+        request_text = "幫我把這個資料夾整理好。"
         status, payload = self._post_json(
             "/v1/compile",
-            {"request": "幫我把這個資料夾整理好。"},
+            {"request": request_text},
         )
         self.assertEqual(status, 200)
         self.assertTrue(payload["ok"])
         result = payload["result"]
+        self.assertEqual(result["input"]["request"], request_text)
+        self.assertEqual(result["intent"]["task_type"], "local-files")
+        self.assertEqual(result["route"]["recommended_agent"], "hermes-local")
         self.assertTrue(result["composition"]["rendered"])
-        self.assertIn("recommended_agent", result["route"])
         self.assertIn("passed", result["evaluation"])
 
     def test_missing_request_is_400(self) -> None:
