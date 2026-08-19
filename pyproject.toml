@@ -12,6 +12,7 @@ authors = [{ name = "Edgar (王世鈞)" }]
 
 [project.scripts]
 prompt-forge = "prompt_forge.cli:main"
+prompt-forge-service = "prompt_forge.service:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
