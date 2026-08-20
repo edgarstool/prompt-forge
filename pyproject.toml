@@ -9,11 +9,13 @@ description = "Local Prompt Forge pipeline: classify, route, compose, evaluate."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Edgar (王世鈞)" }]
+dependencies = ["mcp>=1.26.0"]
 
 [project.scripts]
 prompt-forge = "prompt_forge.cli:main"
 prompt-forge-service = "prompt_forge.service:main"
 edgar-os-prompt-forge = "prompt_forge.edgar_os:main"
+prompt-forge-mcp = "prompt_forge.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
