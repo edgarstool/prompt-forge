@@ -21,6 +21,19 @@ prompt-forge-service --host 127.0.0.1 --port 8787
 
 預設只綁定 `127.0.0.1`，避免原型階段意外對外暴露。
 
+## EDGAR-OS caller
+
+service 啟動後，可由最小 caller 呼叫同一份 HTTP contract：
+
+```powershell
+cd V:\projects\prompt-forge
+$env:PYTHONPATH = "$PWD\src"
+python -m prompt_forge.edgar_os "幫我修好這個 repo，測試完開 PR。"
+```
+
+caller 只負責送出 `/v1/compile` request，並確認 response 包含完整 pipeline
+artifact；不負責 production hostname、authentication 或 workflow execution。
+
 ## GET /health
 
 Request：

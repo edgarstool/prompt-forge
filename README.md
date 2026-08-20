@@ -82,11 +82,14 @@ prompt-forge/
 **Local pipeline 可跑（EDG-342）。**
 
 已有確定性本地閉環：intent → risk → route → context policy → compose → evaluate。
-四個最小案例與 CLI / unittest 可在本機反覆驗證。尚未做對外服務化。
+四個最小案例與 CLI / unittest 可在本機反覆驗證。另有綁定
+`127.0.0.1` 的 HTTP prototype，以及最小 EDGAR-OS caller，可透過
+`POST /v1/compile` 取得完整 pipeline artifact。
 
-這代表第一個 local executable loop 已存在；後續重點是 PromptOS contract 的穩定化、狀態／證據整合，以及是否要再封裝成 service / API / Agent Platform integration。
+這代表 local executable loop 與本機 HTTP 接線已存在；production deployment、
+hostname、authentication 與完整 Agent Platform integration 仍未建立。
 
-詳細 I/O 與指令：`docs/LOCAL-PIPELINE.md`。
+詳細 I/O 與指令：`docs/LOCAL-PIPELINE.md`、`docs/HTTP-API.md`。
 
 ## 本地快速開始（Windows PowerShell）
 
@@ -106,6 +109,9 @@ python -m prompt_forge run --request "幫我把這個資料夾整理好。" --sh
 # 單元測試
 python -m unittest discover -s tests -v
 
+# 另一個 PowerShell 視窗啟動本機 service 後，由 EDGAR-OS caller 呼叫
+python -m prompt_forge.edgar_os "幫我修好這個 repo，測試完開 PR。"
+
 # 或用 helper
 .\scripts\run-local.ps1 eval
 .\scripts\run-local.ps1 test
@@ -122,7 +128,7 @@ prompt-forge/
 ├─ evaluators/           # 評估檢查說明
 ├─ examples/cases/       # 最小案例 A–D
 ├─ tests/                # unittest
-├─ adapters/             # Context policy note（尚未接網路）
+├─ adapters/             # 外部來源接口說明
 └─ scripts/run-local.ps1
 ```
 
