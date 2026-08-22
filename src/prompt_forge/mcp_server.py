@@ -17,7 +17,24 @@ from .pipeline import run_pipeline
 from .service import SERVICE_NAME, SERVICE_VERSION
 
 mcp = FastMCP(SERVICE_NAME)
-mcp._mcp_server.version = SERVICE_VERSION
+
+
+def _advertise_version(server: FastMCP, version: str) -> bool:
+    """Best-effort: advertise SERVICE_VERSION in the MCP initialize response.
+
+    The `mcp` SDK exposes no public setter for the server version, so this
+    reaches into `_mcp_server`. Keep it non-fatal: a private-layout change in a
+    future SDK release must not break importing (and therefore starting) the
+    adapter -- an unset version only affects what clients display.
+    """
+    try:
+        server._mcp_server.version = version
+    except Exception:  # pragma: no cover - depends on future SDK internals
+        return False
+    return True
+
+
+_VERSION_ADVERTISED = _advertise_version(mcp, SERVICE_VERSION)
 
 
 @mcp.tool(

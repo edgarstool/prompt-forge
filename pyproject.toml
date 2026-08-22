@@ -9,7 +9,7 @@ description = "Local Prompt Forge pipeline: classify, route, compose, evaluate."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Edgar (王世鈞)" }]
-dependencies = ["mcp>=1.26.0"]
+dependencies = ["mcp>=1.26.0,<2"]
 
 [project.scripts]
 prompt-forge = "prompt_forge.cli:main"
