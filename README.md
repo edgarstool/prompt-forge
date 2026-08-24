@@ -79,17 +79,31 @@ prompt-forge/
 
 ## 目前狀態
 
-**Local pipeline 可跑（EDG-342）。**
+**Local pipeline 可跑（EDG-342），並已加上 STDIO MCP adapter。**
 
 已有確定性本地閉環：intent → risk → route → context policy → compose → evaluate。
 四個最小案例與 CLI / unittest 可在本機反覆驗證。另有綁定
-`127.0.0.1` 的 HTTP prototype，以及最小 EDGAR-OS caller，可透過
-`POST /v1/compile` 取得完整 pipeline artifact。
+`127.0.0.1` 的 HTTP prototype、最小 EDGAR-OS caller，以及可被 MCP client
+（Claude Desktop、Claude Code、MCP Inspector 等）呼叫的 STDIO MCP adapter。
 
-這代表 local executable loop 與本機 HTTP 接線已存在；production deployment、
-hostname、authentication 與完整 Agent Platform integration 仍未建立。
+明確能力狀態，避免誤讀成「已經上線」：
 
-詳細 I/O 與指令：`docs/LOCAL-PIPELINE.md`、`docs/HTTP-API.md`。
+| 能力 | 狀態 |
+| --- | --- |
+| Local pipeline（`run_pipeline`） | ✅ 可用 |
+| HTTP service（`127.0.0.1:8787`，prototype） | ✅ 可用（僅本機） |
+| EDGAR-OS HTTP caller（`prompt_forge.edgar_os`） | ✅ 可用 |
+| STDIO MCP adapter（`prompt-forge-mcp`） | ✅ 可用（僅本機 STDIO，見 `docs/MCP.md`） |
+| External MCP endpoint（對外 HTTP/SSE/Streamable HTTP MCP） | ❌ 未建立 |
+| Production deployment | ❌ 未建立 |
+| Authentication | ❌ 未建立 |
+| Cloudflare hostname | ❌ 未建立 |
+
+這代表 local executable loop、本機 HTTP 接線與本機 MCP 接線都已存在；對外服務、
+production deployment、hostname、authentication 與完整 Agent Platform integration
+仍未建立。
+
+詳細 I/O 與指令：`docs/LOCAL-PIPELINE.md`、`docs/HTTP-API.md`、`docs/MCP.md`。
 
 ## 本地快速開始（Windows PowerShell）
 
@@ -112,6 +126,12 @@ python -m unittest discover -s tests -v
 # 另一個 PowerShell 視窗啟動本機 service 後，由 EDGAR-OS caller 呼叫
 python -m prompt_forge.edgar_os "幫我修好這個 repo，測試完開 PR。"
 
+# 啟動 STDIO MCP adapter（供 MCP client 連接，見 docs/MCP.md）
+pip install -e .
+prompt-forge-mcp
+# 或不安裝，直接：
+python -m prompt_forge.mcp_server
+
 # 或用 helper
 .\scripts\run-local.ps1 eval
 .\scripts\run-local.ps1 test
@@ -121,8 +141,8 @@ python -m prompt_forge.edgar_os "幫我修好這個 repo，測試完開 PR。"
 
 ```text
 prompt-forge/
-├─ docs/                 # 產品設計 + PromptOS boundary + LOCAL-PIPELINE
-├─ src/prompt_forge/     # 可執行 pipeline（stdlib）
+├─ docs/                 # 產品設計 + PromptOS boundary + LOCAL-PIPELINE + MCP
+├─ src/prompt_forge/     # 可執行 pipeline（stdlib）+ HTTP + MCP adapter
 ├─ prompts/              # 模板說明
 ├─ routers/              # 路由規則說明
 ├─ evaluators/           # 評估檢查說明
