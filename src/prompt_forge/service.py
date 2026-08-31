@@ -14,7 +14,7 @@ from typing import Any
 from .pipeline import run_pipeline
 
 SERVICE_NAME = "prompt-forge"
-SERVICE_VERSION = "0.2.0-dev"
+SERVICE_VERSION = "0.2.0.dev0"
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:
