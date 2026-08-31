@@ -50,6 +50,21 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertTrue(decision.should_compile)
         self.assertIn("read-back", contract.acceptance.lower())
 
+    def test_browser_work_routes_to_capability_without_brand_hint(self):
+        req = UserRequest.from_dict(
+            {
+                "request": "把 Cloudflare dashboard 裡的設定改好並讀回確認。",
+            }
+        )
+        intent = classify_intent(req)
+        risk = check_risk(req, intent)
+        route = route_request(req, intent, risk)
+        ctx = apply_context_policy(req, intent, route)
+        decision, _ = compile_request(req, intent, risk, route, ctx)
+        self.assertEqual(decision.execution_mode, "BROWSER_OPERATOR")
+        self.assertEqual(route.recommended_agent, "browser-operator")
+        self.assertIn("browser", route.supporting_tools)
+
     def test_scheduled_run_mode_detected(self):
         decision, contract = self._compile(
             {
