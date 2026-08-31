@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .compiler import CompilationDecision, SemanticContract, compile_request
 from .schema import (
     REQUIRED_PROMPT_SECTIONS,
     ComposedPrompt,
@@ -18,20 +19,20 @@ def _scope_for(task_type: str) -> tuple[str, str]:
         "research": "Collect current options, constraints, sources with dates, and a short comparison.",
         "coding": "Reproduce issue, implement minimal fix on a branch, run tests, open/update PR.",
         "local-files": "Inventory folder, propose classification, execute non-destructive organize, write report.",
-        "cloud-saas": "Inspect current config, propose minimal safe change, validate endpoints.",
-        "agent-workflow": "Map agents/tools, define handoff, produce runnable workflow notes.",
-        "deterministic-tool": "Use local scripts/parsers only; define schema and validation; avoid LLM for secret values.",
+        "cloud-saas": "Inspect current config, make the smallest useful authorized change, validate the intended interface.",
+        "agent-workflow": "Map the required actors/tools, define bounded handoff, and produce runnable workflow instructions.",
+        "deterministic-tool": "Use deterministic local tooling for structured transformation and validation.",
     }
     excludes = {
-        "research": "Do not purchase, sign up with payment, or change production accounts.",
-        "coding": "Do not merge to default branch, force-push, or touch unrelated dirty files.",
-        "local-files": "Do not mass-delete; do not move secrets into chat logs.",
-        "cloud-saas": "Do not rotate production secrets or change billing without explicit confirm.",
-        "agent-workflow": "Do not deploy production automations in v0.1 local validation.",
-        "deterministic-tool": "Do not paste raw secret values to external models or tickets.",
+        "research": "Do not purchase, sign up with payment, or change production accounts unless explicitly authorized.",
+        "coding": "Do not force-push, rewrite shared history, or touch unrelated dirty files.",
+        "local-files": "Do not mass-delete or move unrelated material outside the agreed scope.",
+        "cloud-saas": "Do not change billing, identity authority, or unrelated production configuration.",
+        "agent-workflow": "Do not widen privileges or create unrelated parallel automation.",
+        "deterministic-tool": "Do not send sensitive raw values to unrelated external systems.",
     }
     return includes.get(task_type, "Complete the requested outcome."), excludes.get(
-        task_type, "Avoid irreversible production changes."
+        task_type, "Avoid irreversible or unrelated changes."
     )
 
 
@@ -41,46 +42,76 @@ def _execution_steps(
     risk: RiskResult,
     route: RouteResult,
     ctx: ContextPolicyResult,
+    decision: CompilationDecision,
 ) -> str:
-    steps: list[str] = []
-    steps.append(f"1. Restate the goal in one sentence based on: {req.request}")
-    steps.append(f"2. Work as agent `{route.recommended_agent}` using tools: {', '.join(route.supporting_tools) or 'none'}.")
+    if not decision.should_compile:
+        return (
+            "1. Answer the user's question directly.\n"
+            "2. Do not manufacture an execution handoff or large task contract.\n"
+            "3. State uncertainty only when it materially affects the answer."
+        )
 
+    steps: list[str] = [
+        f"1. Preserve this outcome without silently shrinking it: {req.request}",
+        f"2. Execute as `{route.recommended_agent}` with the smallest sufficient set of tools: {', '.join(route.supporting_tools) or 'none specified'}.",
+        "3. Retrieve or live-verify mutable state before relying on it; do not promote memory or agent repetition into current truth.",
+    ]
+
+    n = 4
     if ctx.use_context7:
         steps.append(
-            "3. Before version-sensitive claims, query Context7 (or official docs) for matching library/service version."
+            f"{n}. Check version-matched primary/official documentation before version-sensitive claims or edits."
         )
-        n = 4
-    else:
-        n = 3
+        n += 1
 
-    if intent.task_type == "local-files":
-        steps.append(f"{n}. Inventory the target folder (counts, types, obvious clusters) before moving anything.")
-        steps.append(f"{n+1}. Classify into keep / archive / review; preserve originals; avoid destructive deletes.")
-        steps.append(f"{n+2}. Apply low-risk moves only after classification; write a change report.")
-    elif intent.task_type == "research":
-        steps.append(f"{n}. Search current sources; record source + date + eligibility limits.")
-        steps.append(f"{n+1}. Compare options in a table: free tier, region, limits, signup friction, risks.")
-        steps.append(f"{n+2}. Recommend top 1-2 options with why.")
+    if decision.execution_mode == "BROWSER_OPERATOR":
+        steps.extend(
+            [
+                f"{n}. Use the authenticated browser/operator surface; change only the intended setting or page state.",
+                f"{n+1}. Read the affected UI state back after the change and verify the intended value is visible.",
+            ]
+        )
+    elif decision.execution_mode == "SCHEDULED_RUN":
+        steps.extend(
+            [
+                f"{n}. Bootstrap from canonical/current sources instead of stale chat-only state.",
+                f"{n+1}. Perform one bounded run, emit continuation evidence, and write back durable state when warranted.",
+            ]
+        )
     elif intent.task_type == "coding":
-        steps.append(f"{n}. Create/use a feature branch; keep scope tight to the reported failure.")
-        steps.append(f"{n+1}. Implement fix; run the repo's existing tests/linters if present.")
-        steps.append(f"{n+2}. Open or update a PR with Status / Files / Verification / Risks.")
-    elif intent.task_type == "deterministic-tool":
-        steps.append(f"{n}. Keep secret values local. Prefer schema + dry-run validation over model rewriting of secrets.")
-        steps.append(f"{n+1}. Define import schema fields and required validation rules.")
-        steps.append(f"{n+2}. Produce a redacted sample and a checklist for human import.")
+        steps.extend(
+            [
+                f"{n}. Reproduce or characterize the target behavior before changing production code.",
+                f"{n+1}. Make the smallest relevant code change on an isolated branch and run the repo's existing checks.",
+                f"{n+2}. Verify the caller/user-visible behavior and return branch/commit/PR evidence.",
+            ]
+        )
+    elif intent.task_type == "research":
+        steps.extend(
+            [
+                f"{n}. Gather current evidence from independent/primary sources when freshness matters.",
+                f"{n+1}. Separate verified facts, dated observations, inference, and unresolved conflict.",
+                f"{n+2}. Synthesize the smallest decision-useful result instead of dumping sources.",
+            ]
+        )
     else:
-        steps.append(f"{n}. Gather facts from known context, then execute the smallest useful change.")
-        steps.append(f"{n+1}. Validate with a concrete check the user can re-run.")
-        steps.append(f"{n+2}. Report outcomes and leftover risks.")
+        steps.extend(
+            [
+                f"{n}. Execute the smallest useful authorized change inside scope.",
+                f"{n+1}. Verify the actual consumption boundary rather than the intermediate configuration alone.",
+            ]
+        )
 
     if risk.requires_isolation:
-        steps.append("Isolation: use a dedicated branch/worktree; do not mix unrelated workspace dirt.")
+        steps.append("Isolation: keep unrelated workspace state out of the change; use a branch/worktree when appropriate.")
     if risk.forbid_external_secret_exfil:
-        steps.append("Security: never send raw secret values to external LLMs, web forms, or public issues.")
+        steps.append("Sensitive-data boundary: keep raw secret values on an authorized deterministic/local path.")
 
     return "\n".join(steps)
+
+
+def _lines(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items)
 
 
 def compose_prompt(
@@ -89,87 +120,80 @@ def compose_prompt(
     risk: RiskResult,
     route: RouteResult,
     ctx: ContextPolicyResult,
+    *,
+    decision: CompilationDecision | None = None,
+    contract: SemanticContract | None = None,
 ) -> ComposedPrompt:
-    include, exclude = _scope_for(intent.task_type)
-    known = req.known_context[:] or ["No extra known_context provided."]
-    assumptions = list(route.assumptions)
-    if not assumptions:
-        assumptions = ["No extra assumptions beyond the user request text."]
+    if decision is None or contract is None:
+        decision, contract = compile_request(req, intent, risk, route, ctx)
 
-    constraints = req.constraints[:]
-    if risk.level == "high":
-        constraints.append("High-risk task: prefer reversible steps and explicit stop on uncertainty.")
+    include, exclude = _scope_for(intent.task_type)
+    constraints = contract.constraints[:] or ["No additional explicit constraints supplied."]
 
     sections = {
         "Context": (
-            f"User request: {req.request}\n"
+            f"Execution mode: {decision.execution_mode}.\n"
             f"Task type: {intent.task_type} (confidence {intent.confidence}).\n"
             f"Risk level: {risk.level}.\n"
-            f"Recommended agent: {route.recommended_agent}."
+            f"Recommended executor: {route.recommended_agent}.\n"
+            f"Truth state: {contract.truth_state}."
         ),
-        "Goal": f"Produce a completed outcome for: {req.request}",
+        "Goal": contract.goal,
         "Scope": f"In scope: {include}\nOut of scope: {exclude}",
-        "Known Facts": "\n".join(f"- {k}" for k in known),
-        "Assumptions": "\n".join(f"- {a}" for a in assumptions),
-        "Execution Task": _execution_steps(req, intent, risk, route, ctx),
-        "Validation": (
-            "Success means:\n"
-            "- The main user-visible goal is done or a blocked reason is explicit.\n"
-            "- Concrete verification steps were run or clearly impossible with reason.\n"
-            f"- Risk controls for level `{risk.level}` were respected."
-        ),
+        "Known Facts": _lines(contract.evidence),
+        "Assumptions": _lines(contract.unknowns),
+        "Execution Task": _execution_steps(req, intent, risk, route, ctx, decision),
+        "Validation": contract.acceptance,
         "Deliverables": (
             "- Short status\n"
-            "- What changed (paths/commands)\n"
+            "- What changed / what was learned\n"
             "- Verification evidence\n"
-            "- Known limits / risks\n"
-            "- Next step (only if needed)"
+            "- Remaining limitations or unresolved unknowns\n"
+            "- Next bounded action only when needed"
         ),
         "Stop Conditions": (
-            "Stop and report instead of guessing when:\n"
-            "- Required target path/repo/service cannot be identified.\n"
-            "- Action needs production/payment/secret rotation confirmation.\n"
-            "- Further work would be irreversible without backup.\n"
-            + (
-                "\n".join(f"- ASK USER: {r}" for r in risk.ask_reasons)
-                if risk.ask_user
-                else "- Do not block on non-essential clarifications; state assumptions instead."
-            )
+            "Stop and report rather than improvising indefinitely when:\n"
+            "- the required target cannot be identified or current evidence materially conflicts;\n"
+            "- a new payment, identity/authority decision, irreversible destructive action, or force-push/history rewrite is required;\n"
+            "- required verification cannot be performed and success would otherwise be speculative."
         ),
         "Output Format": (
-            "Reply in Traditional Chinese unless the user request is pure code.\n"
-            "Use sections: Status / Files Changed / What Changed / Verification / Known Limits / Risks / Next."
+            "Return a concise completion receipt with outcome, evidence, limits, and write-back status. "
+            "Do not call configuration/planning/attempts 'done' without acceptance evidence."
         ),
+        "Authority & Context": _lines(contract.authority),
+        "Execution Freedom": _lines(contract.methods + contract.preferences + contract.policy),
+        "Evidence Return": contract.evidence_return,
+        "Write-back": contract.write_back,
+        "Constraints": _lines(constraints),
     }
-
-    if risk.requires_isolation or intent.task_type == "coding":
-        sections["Branch / Worktree Isolation"] = (
-            "Use a dedicated branch for the change. Do not commit unrelated dirty files. "
-            "Prefer worktree only when dual checkouts are truly required."
-        )
-        sections["Rollback"] = "Keep changes reversible via git revert/reset on the feature branch; no force-push to shared default."
-        sections["Forbidden Actions"] = (
-            "No merge to default branch, no secrets in commits, no mass delete, no production credential rotation."
-        )
 
     if ctx.use_context7:
         sections["Context Freshness"] = (
-            "Use Context7 or official docs for libraries/SDKs/CLIs/cloud APIs mentioned. "
-            "Prefer version-matched references; cite what was checked."
+            "Use version-matched primary/official documentation for libraries, SDKs, CLIs, APIs, or fast-changing services."
         )
-    if constraints:
-        sections["Constraints"] = "\n".join(f"- {c}" for c in constraints)
 
-    # Render in stable order: required first, then optional extras
     ordered_keys = list(REQUIRED_PROMPT_SECTIONS) + [
-        k for k in sections.keys() if k not in REQUIRED_PROMPT_SECTIONS
+        "Authority & Context",
+        "Execution Freedom",
+        "Evidence Return",
+        "Write-back",
+        "Constraints",
+        "Context Freshness",
     ]
-    lines = ["# Executable Prompt (Prompt Forge local)", ""]
+
+    title = (
+        "# Direct Answer Recommendation (Prompt Forge)"
+        if not decision.should_compile
+        else "# Executable Task Contract (Prompt Forge)"
+    )
+    lines = [title, ""]
     for key in ordered_keys:
-        if key not in sections:
+        value = sections.get(key)
+        if not value or not value.strip():
             continue
         lines.append(f"## {key}")
-        lines.append(sections[key].rstrip())
+        lines.append(value.rstrip())
         lines.append("")
 
     rendered = "\n".join(lines).strip() + "\n"
@@ -178,6 +202,11 @@ def compose_prompt(
         "recommended_agent": route.recommended_agent,
         "risk_level": risk.level,
         "use_context7": ctx.use_context7,
-        "section_count": len(sections),
+        "execution_mode": decision.execution_mode,
+        "should_compile": decision.should_compile,
+        "compile_reasons": decision.reasons,
+        "truth_state": contract.truth_state,
+        "semantic_contract": contract.to_dict(),
+        "section_count": len([k for k in ordered_keys if sections.get(k)]),
     }
     return ComposedPrompt(sections=sections, rendered=rendered, meta=meta)
