@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from .schema import IntentResult, RiskResult, RouteResult, UserRequest
 
 # Default agent map for local validation. Not a product lock-in.
@@ -23,6 +25,19 @@ _TOOLS_BY_TYPE = {
     "deterministic-tool": ["python", "powershell"],
 }
 
+_BROWSER_PATTERNS = (
+    r"\bchrome\b",
+    r"\bbrowser\b",
+    r"dashboard",
+    r"瀏覽器",
+    r"網頁介面",
+    r"\bui\b",
+)
+
+
+def _looks_like_browser_work(text: str) -> bool:
+    return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in _BROWSER_PATTERNS)
+
 
 def route_request(
     req: UserRequest,
@@ -35,6 +50,18 @@ def route_request(
     assumptions: list[str] = []
     rationale: list[str] = [f"intent={task_type}", f"risk={risk.level}"]
 
+    # Route by capability before brand. Authenticated/cross-page UI work should
+    # land on a browser operator rather than a coding agent by default.
+    if _looks_like_browser_work(req.request):
+        agent = "browser-operator"
+        tools = list(dict.fromkeys(tools + ["browser", "ui-read-back"]))
+        rationale.append("capability=browser-operator")
+        assumptions.append(
+            "The task depends on browser/UI state; use an authorized browser operator and read the affected state back after mutation."
+        )
+
+    # An explicit preferred executor remains a user preference, provided no
+    # stronger secret-safety boundary below requires deterministic local work.
     if req.preferred_agent:
         agent = req.preferred_agent
         rationale.append(f"preferred_agent_override={req.preferred_agent}")

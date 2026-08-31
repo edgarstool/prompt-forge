@@ -1,109 +1,148 @@
 # Prompt Forge
 
-> Turn vague ideas into executable prompts.
+> Turn vague ideas into executable task contracts.
 >
-> 把模糊的想法，鍛造成可以交給 AI 執行的任務。
+> 把模糊的想法，鍛造成可以交給 AI / Agent / Tool 執行、驗收與回傳證據的任務契約。
 
-Prompt Forge 是一個面向多種 AI Agent 的 Prompt 生產系統。它不是 Prompt 收藏夾，而是一條可測試、可改良、可交付的任務鍛造流程。
+Prompt Forge 是 EDGAR PromptOS 的 executable compiler / router。它不是 Prompt 收藏夾，也不是另一份世界狀態資料庫；它負責把 request + relevant context + policy 編譯成最小但足夠的 bounded executable prompt / handoff，並用固定 evaluator 檢查品質。
 
-## PromptOS 與 Prompt Forge
+## PromptOS、Prompt Forge、Skills、State
 
-**PromptOS** 是 EDGAR-OS 的一級 Prompt governance / task-contract architecture（提示治理／任務契約架構）。它負責把 human intent 解析成有 authority、evidence、scope、constraints、assumptions、validation、stop conditions 與 evidence return 的可執行任務契約。
-
-**Prompt Forge** 是 PromptOS 的 executable compiler / factory：把 request + context + policy 編譯成 bounded executable prompt / handoff，並用固定 evaluator 檢查品質。
+- **EDGAR-OS** owns continuity, context, policy, state and evidence.
+- **PromptOS** defines prompt governance / task-contract semantics.
+- **Prompt Forge** compiles intent and routes the task into an executable contract.
+- **Skills** provide reusable methods; they are loaded only when relevant.
+- **SSoT / repo / provider / live runtime** provide authoritative mutable state.
+- **Agents / tools** execute and return evidence.
 
 因此：
 
 - PromptOS ≠ Prompt 收藏庫。
 - PromptOS ≠ Prompt Forge。
-- Prompt Forge 是 PromptOS 的可執行子系統。
-- 更大的 Agent Platform 才負責 team selection、tool attachment、workflow execution、long-running orchestration 與 state write-back。
+- Prompt Forge = **compiler + router**，不是巨型 method library。
+- Prompt Forge 不擁有 Current State；它只攜帶本次任務需要的 state/evidence projection。
+- Agent 不擁有 EDGAR-OS continuity；Agent 借用本次任務需要的 context。
+- 更大的 Agent Platform 才負責 team selection、tool attachment、long-running orchestration、evidence collection 與 durable state write-back execution。
 
 詳見 [`docs/PROMPTOS-ARCHITECTURE.md`](docs/PROMPTOS-ARCHITECTURE.md)。
 
-## 產品目標
+## v0.2 Compiler / Router semantics
 
-使用者只需要描述目標，Prompt Forge 應該能：
+2026-09-01 起，Prompt Forge 的 deterministic pipeline 在既有 intent / risk / route / context policy 上增加 semantic compiler：
 
-1. 判斷任務類型與真正意圖。
-2. 分離 known facts / evidence、authority、constraints 與 assumptions。
-3. 選擇適合的 Agent、工具與資料來源。
-4. 補上合理且可逆的假設，而不是不斷反問。
-5. 產出可以直接複製執行的完整 Prompt / task contract。
-6. 內建驗收、停止條件、證據回傳與必要的回復方式。
-7. 在涉及 library、SDK、API、CLI 或 framework 時，透過 Context7 或等效 primary / official source 取得版本相符的最新文件。
+```text
+human request
+→ intent
+→ risk / permission
+→ executor / tool route
+→ context freshness policy
+→ semantic compile + execution-mode decision
+→ task-contract composition
+→ evaluation
+```
+
+Compiler 先判斷「這次是否真的需要產生 handoff prompt」，避免為了 Prompt 而製造 Prompt。
+
+支援的 execution modes：
+
+- `DIRECT`
+- `EXECUTION_HANDOFF`
+- `RESEARCH`
+- `BUILD`
+- `DEBUG`
+- `BROWSER_OPERATOR`
+- `MAINTENANCE`
+- `SCHEDULED_RUN`
+- `STRATEGIC`
+
+核心 semantic slots 保持分離：
+
+- Goal
+- Authority
+- Evidence
+- Constraint
+- Policy
+- Preference
+- Method
+- Unknown
+
+Mutable state 可標記：
+
+- `VERIFIED_CURRENT`
+- `DATED_OBSERVATION`
+- `HISTORICAL`
+- `INFERRED`
+- `UNKNOWN`
+- `CONFLICTED`
+
+這些分類的目的不是增加格式，而是避免把記憶、推測、偏好與可驗證事實混成同一層。
+
+## Task Contract
+
+輸出的 contract 依任務複雜度縮放。核心概念是 **strong perimeter, flexible interior**：明確定義 outcome / scope / acceptance / evidence，但讓 executor 在邊界內自行選擇合理實作方法。
+
+常用欄位：
+
+- Goal / Outcome
+- Known Facts / Evidence
+- Authority & Context
+- Scope
+- Constraints / Permissions
+- Assumptions / Unknowns
+- Selected Executor / Tools
+- Execution Freedom / Method
+- Context Freshness Requirements
+- Execution Task
+- Validation / Acceptance Criteria
+- Deliverables
+- Stop Conditions
+- Evidence to Return
+- State Transition / Write-back Target
+
+Prompt Forge 不要求每份輸出都塞滿所有欄位。**Complexity belongs in the compiler; only necessary complexity belongs in the compiled task.**
 
 ## 產品原則
 
-- **先給可用版本，再一起修。**
-- **只有真正阻塞或高風險時才提問。**
-- **Prompt 是施工單，不是理論課。**
-- **把 unknown / assumption 明示，不把猜測寫成事實。**
-- **能由確定性工具完成的事，不交給模型猜。**
-- **安全措施要與風險成比例，不用棉被包住螺絲起子。**
-- **每次交付都應可驗收、可比較、可停止，並知道要回傳什麼 evidence。**
+- **Mainline first.** 先讓真正想要的 outcome 變成可驗證狀態。
+- **Wide judgment, narrow execution.** 判斷可以寬，交付給 executor 的工作要收斂。
+- **Plausibility is not correctness.** 看起來合理不算完成。
+- **Configured ≠ deployed ≠ usable ≠ persistent.** 驗證真正 consumption boundary。
+- **Evidence over claims.** plan、command、config edit、agent statement 都不是 completion proof。
+- **Unknown stays unknown.** 不把記憶、重述或 inference 偷升格成 current truth。
+- **Prefer direct execution when possible.** 能直接安全完成，就不要多製造一層 prompt/handoff。
+- **Prefer existing capability and reversible execution.** 不為了架構漂亮新增不必要系統。
+- **Ask the human only at real human-only boundaries.** 偏好、secret、付款、身份／authority、不可逆破壞或真正缺失的阻塞事實。
+- **Skills are reusable methods.** 重複 workflow lesson 應升成 Skill，而不是膨脹 mother prompt。
+- **No parallel SSoT.** Prompt Forge 編譯 state，不取代 state authority。
 
-## v0.1 範圍
-
-第一版核心包含：
-
-- Prompt Router：判斷任務類型與建議執行者。
-- Prompt Composer：把需求組成完整可執行 Prompt / task contract。
-- Context Policy：需要時加入版本／新鮮度查核。
-- Prompt Evaluation：用固定測試判斷輸出是否完整、簡潔、可執行。
-- 四個最小案例。
-- CLI / unittest test runner。
-
-暫時不做：
-
-- 完整聊天產品
-- 多租戶與帳號系統
-- 自動執行 production 變更
-- Prompt 市集
-- 複雜前端介面
-- 完整 Agent Platform / long-running orchestrator
-
-## 預計結構
-
-```text
-prompt-forge/
-├─ docs/          # 產品設計、PromptOS 邊界、決策與交付流程
-├─ prompts/       # 可組合的 Prompt 模板
-├─ routers/       # 任務分類與工具路由規則
-├─ skills/        # 特定 Agent / 領域能力包
-├─ evaluators/    # Prompt 品質檢查規則
-├─ examples/      # 真實輸入與預期輸出
-├─ tests/         # 驗收案例
-└─ adapters/      # Context7、GitHub 等外部來源接口
-```
-
-## 目前狀態
-
-**Local pipeline 可跑（EDG-342），並已加上 STDIO MCP adapter。**
-
-已有確定性本地閉環：intent → risk → route → context policy → compose → evaluate。
-四個最小案例與 CLI / unittest 可在本機反覆驗證。另有綁定
-`127.0.0.1` 的 HTTP prototype、最小 EDGAR-OS caller，以及可被 MCP client
-（Claude Desktop、Claude Code、MCP Inspector 等）呼叫的 STDIO MCP adapter。
-
-明確能力狀態，避免誤讀成「已經上線」：
+## 目前能力狀態
 
 | 能力 | 狀態 |
 | --- | --- |
-| Local pipeline（`run_pipeline`） | ✅ 可用 |
-| HTTP service（`127.0.0.1:8787`，prototype） | ✅ 可用（僅本機） |
-| EDGAR-OS HTTP caller（`prompt_forge.edgar_os`） | ✅ 可用 |
-| STDIO MCP adapter（`prompt-forge-mcp`） | ✅ 可用（僅本機 STDIO，見 `docs/MCP.md`） |
-| External MCP endpoint（對外 HTTP/SSE/Streamable HTTP MCP） | ❌ 未建立 |
+| Local deterministic pipeline (`run_pipeline`) | ✅ 可用 |
+| Semantic compiler / execution-mode router | ✅ 可用（v0.2 dev） |
+| Task-contract composer + evaluator | ✅ 可用 |
+| HTTP service (`127.0.0.1:8787`) | ✅ prototype，本機 |
+| EDGAR-OS HTTP caller (`prompt_forge.edgar_os`) | ✅ 可用 |
+| STDIO MCP adapter (`prompt-forge-mcp`) | ✅ 可用，本機 STDIO |
+| GitHub Actions regression suite | ✅ PR / master CI |
+| External MCP endpoint (public HTTP/SSE/Streamable HTTP) | ❌ 未建立 |
 | Production deployment | ❌ 未建立 |
-| Authentication | ❌ 未建立 |
-| Cloudflare hostname | ❌ 未建立 |
+| Public authentication / hostname | ❌ 未建立 |
+| Full long-running Agent Platform | ❌ 不屬於目前 Prompt Forge runtime |
 
-這代表 local executable loop、本機 HTTP 接線與本機 MCP 接線都已存在；對外服務、
-production deployment、hostname、authentication 與完整 Agent Platform integration
-仍未建立。
+這代表 compiler/router、local HTTP 與 STDIO MCP 接線已有 executable implementation；**不代表 Prompt Forge 已是 public production service**。
 
-詳細 I/O 與指令：`docs/LOCAL-PIPELINE.md`、`docs/HTTP-API.md`、`docs/MCP.md`。
+## 驗證
+
+PR / `master` 會跑完整 unittest suite。v0.2 compiler/router regression cases 包含：
+
+- Codex coding handoff → `BUILD`
+- authenticated dashboard task → `BROWSER_OPERATOR`
+- recurring agent task → `SCHEDULED_RUN`
+- simple factual question → `DIRECT` / no handoff
+- semantic-slot separation + truth-state preservation
+- 舊 pipeline cases、HTTP service、EDGAR-OS caller、MCP STDIO regression
 
 ## 本地快速開始（Windows PowerShell）
 
@@ -111,51 +150,56 @@ production deployment、hostname、authentication 與完整 Agent Platform integ
 cd V:\projects\prompt-forge
 $env:PYTHONPATH = "$PWD\src"
 
+# 安裝 project + MCP dependency
+python -m pip install -e .
+
 # 各階段輸入輸出契約
 python -m prompt_forge io
 
-# 跑四個最小案例
+# 跑案例 / evaluator
 python -m prompt_forge eval
 
-# 單次組裝 + 顯示 Prompt
-python -m prompt_forge run --request "幫我把這個資料夾整理好。" --show-prompt
+# 單次 compile + 顯示 task contract
+python -m prompt_forge run --request "給 Codex 一個任務，把登入 callback bug 修好並驗證。" --show-prompt
 
-# 單元測試
+# 完整 regression suite
 python -m unittest discover -s tests -v
 
-# 另一個 PowerShell 視窗啟動本機 service 後，由 EDGAR-OS caller 呼叫
+# 本機 HTTP caller
 python -m prompt_forge.edgar_os "幫我修好這個 repo，測試完開 PR。"
 
-# 啟動 STDIO MCP adapter（供 MCP client 連接，見 docs/MCP.md）
-pip install -e .
+# STDIO MCP adapter
 prompt-forge-mcp
-# 或不安裝，直接：
+# 或
 python -m prompt_forge.mcp_server
-
-# 或用 helper
-.\scripts\run-local.ps1 eval
-.\scripts\run-local.ps1 test
 ```
 
-### 目錄對應
+## 目錄
 
 ```text
 prompt-forge/
-├─ docs/                 # 產品設計 + PromptOS boundary + LOCAL-PIPELINE + MCP
-├─ src/prompt_forge/     # 可執行 pipeline（stdlib）+ HTTP + MCP adapter
-├─ prompts/              # 模板說明
-├─ routers/              # 路由規則說明
-├─ evaluators/           # 評估檢查說明
-├─ examples/cases/       # 最小案例 A–D
+├─ docs/                 # PromptOS boundary / local/API/MCP docs
+├─ src/prompt_forge/     # compiler + deterministic pipeline + HTTP/MCP
+├─ prompts/              # prompt/template notes
+├─ routers/              # routing notes
+├─ evaluators/           # evaluation notes
+├─ examples/cases/       # regression examples
 ├─ tests/                # unittest
-├─ adapters/             # 外部來源接口說明
-└─ scripts/run-local.ps1
+├─ adapters/             # external-source adapter notes
+├─ .github/workflows/    # CI
+└─ scripts/
 ```
 
 ## 專案角色
 
 - **產品擁有者：** 王世鈞（Edgar）／德德
-- **協作方式：** AI 提議與施工，Edgar 保留方向決定權；任何設計都可以根據實際使用推翻重做。
+- **協作原則：** models / agents / tools are replaceable collaborators; EDGAR-OS retains continuity and authority boundaries.
+
+## Version
+
+Current development package version: `0.2.0.dev0`.
+
+這是 development version 對齊，不等於正式 release/tag。
 
 ## License
 
