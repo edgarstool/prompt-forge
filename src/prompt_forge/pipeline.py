@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .compiler import compile_request
 from .composer import compose_prompt
 from .context_policy import apply_context_policy
 from .evaluator import evaluate_prompt
@@ -19,7 +20,16 @@ def run_pipeline(payload: dict[str, Any] | UserRequest) -> PipelineResult:
     risk = check_risk(req, intent)
     route = route_request(req, intent, risk)
     ctx = apply_context_policy(req, intent, route)
-    composition = compose_prompt(req, intent, risk, route, ctx)
+    decision, contract = compile_request(req, intent, risk, route, ctx)
+    composition = compose_prompt(
+        req,
+        intent,
+        risk,
+        route,
+        ctx,
+        decision=decision,
+        contract=contract,
+    )
     evaluation = evaluate_prompt(req, intent, risk, route, ctx, composition)
     return PipelineResult(
         input=req,
