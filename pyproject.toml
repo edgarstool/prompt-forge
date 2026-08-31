@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prompt-forge"
-version = "0.1.0"
-description = "Local Prompt Forge pipeline: classify, route, compose, evaluate."
+version = "0.2.0.dev0"
+description = "PromptOS compiler/router pipeline: classify, resolve, route, compose, and evaluate bounded task contracts."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Edgar (王世鈞)" }]
