@@ -6,14 +6,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROFILE="${AWS_PROFILE:-edgar}"
+PROFILE="${AWS_PROFILE:-}"
 REGION="${AWS_REGION:-ap-southeast-1}"
 FUNCTION_NAME="${PROMPT_FORGE_FUNCTION_NAME:-prompt-forge-http}"
 ROLE_NAME="${PROMPT_FORGE_ROLE_NAME:-prompt-forge-http-lambda}"
 RUNTIME="${PROMPT_FORGE_RUNTIME:-python3.12}"
 HANDLER="prompt_forge.lambda_handler.lambda_handler"
 
-AWS=(aws --profile "$PROFILE" --region "$REGION")
+AWS=(aws --region "$REGION")
+if [[ -n "$PROFILE" ]]; then
+  AWS+=(--profile "$PROFILE")
+fi
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -24,9 +27,17 @@ need_cmd() {
 
 need_cmd aws
 need_cmd python3
-need_cmd zip
 
-echo "Using profile=${PROFILE} region=${REGION} function=${FUNCTION_NAME}"
+aws_file_uri() {
+  local scheme="$1"
+  local path="$2"
+  if command -v cygpath >/dev/null 2>&1; then
+    path="$(cygpath -m "$path")"
+  fi
+  printf '%s://%s' "$scheme" "$path"
+}
+
+echo "Using profile=${PROFILE:-<active-login>} region=${REGION} function=${FUNCTION_NAME}"
 "${AWS[@]}" sts get-caller-identity --query 'Account' --output text >/dev/null
 
 ACCOUNT="$("${AWS[@]}" sts get-caller-identity --query 'Account' --output text)"
@@ -49,7 +60,7 @@ if ! "${AWS[@]}" iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
 JSON
   "${AWS[@]}" iam create-role \
     --role-name "$ROLE_NAME" \
-    --assume-role-policy-document "file://${TRUST}" \
+    --assume-role-policy-document "$(aws_file_uri file "$TRUST")" \
     --description "Minimal Prompt Forge HTTP Lambda role" >/dev/null
   rm -f "$TRUST"
   "${AWS[@]}" iam attach-role-policy \
@@ -80,14 +91,22 @@ if [[ ! -f "$STAGE/prompt_forge/__init__.py" || ! -f "$STAGE/prompt_forge/lambda
 fi
 (
   cd "$STAGE"
-  zip -qr function.zip prompt_forge
+  python3 - <<'PYZIP'
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
+
+root = Path("prompt_forge")
+with ZipFile("function.zip", "w", compression=ZIP_DEFLATED) as archive:
+    for path in sorted(root.rglob("*.py")):
+        archive.write(path, path.as_posix())
+PYZIP
 )
 
 if "${AWS[@]}" lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
   echo "Updating existing function ${FUNCTION_NAME}"
   "${AWS[@]}" lambda update-function-code \
     --function-name "$FUNCTION_NAME" \
-    --zip-file "fileb://${STAGE}/function.zip" >/dev/null
+    --zip-file "$(aws_file_uri fileb "${STAGE}/function.zip")" >/dev/null
   "${AWS[@]}" lambda wait function-updated --function-name "$FUNCTION_NAME"
   "${AWS[@]}" lambda update-function-configuration \
     --function-name "$FUNCTION_NAME" \
@@ -103,7 +122,7 @@ else
     --runtime "$RUNTIME" \
     --role "$ROLE_ARN" \
     --handler "$HANDLER" \
-    --zip-file "fileb://${STAGE}/function.zip" \
+    --zip-file "$(aws_file_uri fileb "${STAGE}/function.zip")" \
     --timeout 15 \
     --memory-size 128 \
     --architectures x86_64 >/dev/null
@@ -116,12 +135,40 @@ if ! "${AWS[@]}" lambda get-function-url-config --function-name "$FUNCTION_NAME"
     --function-name "$FUNCTION_NAME" \
     --auth-type NONE \
     --cors '{"AllowOrigins":["*"],"AllowMethods":["GET","POST"]}' >/dev/null
+fi
+
+AUTH_TYPE="$("${AWS[@]}" lambda get-function-url-config \
+  --function-name "$FUNCTION_NAME" \
+  --query 'AuthType' \
+  --output text)"
+if [[ "$AUTH_TYPE" != "NONE" ]]; then
+  echo "existing Function URL AuthType=${AUTH_TYPE}; refusing to grant public permissions" >&2
+  exit 1
+fi
+
+# Since October 2025, new public Function URLs require both permissions.
+# Keep these checks outside URL creation so reruns can repair a partial policy.
+POLICY="$("${AWS[@]}" lambda get-policy \
+  --function-name "$FUNCTION_NAME" \
+  --query 'Policy' \
+  --output text 2>/dev/null || true)"
+
+if [[ "$POLICY" != *'FunctionURLAllowPublicAccess'* ]]; then
   "${AWS[@]}" lambda add-permission \
     --function-name "$FUNCTION_NAME" \
     --statement-id FunctionURLAllowPublicAccess \
     --action lambda:InvokeFunctionUrl \
     --principal "*" \
     --function-url-auth-type NONE >/dev/null
+fi
+
+if [[ "$POLICY" != *'FunctionURLAllowPublicInvoke'* ]]; then
+  "${AWS[@]}" lambda add-permission \
+    --function-name "$FUNCTION_NAME" \
+    --statement-id FunctionURLAllowPublicInvoke \
+    --action lambda:InvokeFunction \
+    --principal "*" \
+    --invoked-via-function-url >/dev/null
 fi
 
 FUNCTION_URL="$("${AWS[@]}" lambda get-function-url-config \
