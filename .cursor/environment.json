@@ -1,0 +1,10 @@
+{
+  "name": "Prompt Forge",
+  "install": "curl -LsSf https://astral.sh/uv/install.sh | sh && . \"$HOME/.local/bin/env\" && uv sync --frozen",
+  "terminals": [
+    {
+      "name": "prompt-forge-http",
+      "command": ". \"$HOME/.local/bin/env\" && uv run prompt-forge-service --host 127.0.0.1 --port 8787"
+    }
+  ]
+}
