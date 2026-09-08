@@ -40,8 +40,9 @@ artifact；不負責 production hostname、authentication 或 workflow execution
 - `POST /compile`（公網契約）
 - `POST /v1/compile`（本機 / EDGAR-OS caller 相容別名）
 
-公網入口是 AWS Lambda Function URL（profile `edgar`、region `ap-southeast-1`）。這是
-unauthenticated prototype，**不是** production、也沒有自訂 hostname。
+公網入口預定是 AWS Lambda Function URL（profile `edgar`、region `ap-southeast-1`）。
+這是 unauthenticated prototype，**不是** production、也沒有自訂 hostname。
+實際 URL 以 `scripts/deploy-ap-southeast-1.sh` 成功輸出為準。
 
 部署：
 
