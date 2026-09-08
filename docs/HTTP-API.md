@@ -34,6 +34,22 @@ python -m prompt_forge.edgar_os "幫我修好這個 repo，測試完開 PR。"
 caller 只負責送出 `/v1/compile` request，並確認 response 包含完整 pipeline
 artifact；不負責 production hostname、authentication 或 workflow execution。
 
+公網 prototype（EDG-343 最小雲端下一步）與本機共用同一份 contract：
+
+- `GET /health`
+- `POST /compile`（公網契約）
+- `POST /v1/compile`（本機 / EDGAR-OS caller 相容別名）
+
+公網入口預定是 AWS Lambda Function URL（profile `edgar`、region `ap-southeast-1`）。
+這是 unauthenticated prototype，**不是** production、也沒有自訂 hostname。
+實際 URL 以 `scripts/deploy-ap-southeast-1.sh` 成功輸出為準。
+
+部署：
+
+```bash
+AWS_PROFILE=edgar AWS_REGION=ap-southeast-1 ./scripts/deploy-ap-southeast-1.sh
+```
+
 ## GET /health
 
 Request：
@@ -52,6 +68,10 @@ Response：
   "pipeline": "local-deterministic"
 }
 ```
+
+## POST /compile
+
+公網與本機都接受這個 path。`POST /v1/compile` 是等價別名，保留給既有 caller。
 
 ## POST /v1/compile
 
@@ -85,7 +105,7 @@ $Body = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri "http://127.0.0.1:8787/v1/compile" `
+  -Uri "http://127.0.0.1:8787/compile" `
   -ContentType "application/json" `
   -Body $Body
 ```
@@ -149,11 +169,11 @@ v0.2 先用 Python standard library 的 `http.server`，原因是這輪要驗證
 
 本版本不包含：
 
-- production deployment
+- production deployment / custom hostname
 - authentication
 - rate limiting
 - multi-tenant state
-- database
+- database / run persistence
 - frontend
 - live Context7 request
 - long-running Agent orchestration
@@ -169,7 +189,7 @@ python -m unittest discover -s tests -v
 至少必須驗證：
 
 1. `/health` 回 200。
-2. 合法 `/v1/compile` 回完整 pipeline artifact。
+2. 合法 `/compile` 與 `/v1/compile` 回完整 pipeline artifact。
 3. 缺少 `request` 回 400。
 4. malformed JSON 回 400。
 5. 未知 endpoint 回 404。

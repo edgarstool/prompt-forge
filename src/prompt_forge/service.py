@@ -15,10 +15,76 @@ from .pipeline import run_pipeline
 
 SERVICE_NAME = "prompt-forge"
 SERVICE_VERSION = "0.2.0.dev0"
+COMPILE_PATHS = frozenset({"/compile", "/v1/compile"})
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def normalize_path(path: str) -> str:
+    """Strip query string and trailing slash (except root)."""
+
+    cleaned = (path or "/").split("?", 1)[0]
+    if len(cleaned) > 1:
+        cleaned = cleaned.rstrip("/")
+    return cleaned or "/"
+
+
+def health_payload() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "service": SERVICE_NAME,
+        "version": SERVICE_VERSION,
+        "pipeline": "local-deterministic",
+    }
+
+
+def _compile_from_body(body: bytes | str | None) -> tuple[int, dict[str, Any]]:
+    if body is None:
+        return 400, {"ok": False, "error": "empty_body"}
+
+    if isinstance(body, str):
+        raw = body.encode("utf-8")
+    else:
+        raw = body
+
+    if not raw:
+        return 400, {"ok": False, "error": "empty_body"}
+
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return 400, {"ok": False, "error": "invalid_json"}
+
+    if not isinstance(payload, dict):
+        return 400, {"ok": False, "error": "payload_must_be_object"}
+
+    try:
+        result = run_pipeline(payload)
+    except (TypeError, ValueError) as exc:
+        return 400, {"ok": False, "error": "invalid_request", "detail": str(exc)}
+
+    return 200, {"ok": True, "result": result.to_dict()}
+
+
+def dispatch(
+    method: str,
+    path: str,
+    body: bytes | str | None = None,
+) -> tuple[int, dict[str, Any]]:
+    """Shared HTTP contract used by the local server and the Lambda adapter."""
+
+    verb = (method or "GET").upper()
+    route = normalize_path(path)
+
+    if verb == "GET" and route == "/health":
+        return 200, health_payload()
+
+    if verb == "POST" and route in COMPILE_PATHS:
+        return _compile_from_body(body)
+
+    return 404, {"ok": False, "error": "not_found"}
 
 
 class PromptForgeHandler(BaseHTTPRequestHandler):
@@ -38,25 +104,10 @@ class PromptForgeHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/health":
-            self._send_json(
-                200,
-                {
-                    "ok": True,
-                    "service": SERVICE_NAME,
-                    "version": SERVICE_VERSION,
-                    "pipeline": "local-deterministic",
-                },
-            )
-            return
-
-        self._send_json(404, {"ok": False, "error": "not_found"})
+        status, payload = dispatch("GET", self.path)
+        self._send_json(status, payload)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/v1/compile":
-            self._send_json(404, {"ok": False, "error": "not_found"})
-            return
-
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -67,31 +118,9 @@ class PromptForgeHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"ok": False, "error": "empty_body"})
             return
 
-        try:
-            raw = self.rfile.read(content_length)
-            payload = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            self._send_json(400, {"ok": False, "error": "invalid_json"})
-            return
-
-        if not isinstance(payload, dict):
-            self._send_json(400, {"ok": False, "error": "payload_must_be_object"})
-            return
-
-        try:
-            result = run_pipeline(payload)
-        except (TypeError, ValueError) as exc:
-            self._send_json(
-                400,
-                {
-                    "ok": False,
-                    "error": "invalid_request",
-                    "detail": str(exc),
-                },
-            )
-            return
-
-        self._send_json(200, {"ok": True, "result": result.to_dict()})
+        raw = self.rfile.read(content_length)
+        status, payload = dispatch("POST", self.path, raw)
+        self._send_json(status, payload)
 
 
 def create_server(host: str = "127.0.0.1", port: int = 8787) -> ThreadingHTTPServer:

@@ -59,6 +59,32 @@ class PromptForgeServiceTests(unittest.TestCase):
         self.assertTrue(result["composition"]["rendered"])
         self.assertIn("passed", result["evaluation"])
 
+    def test_compile_alias_matches_v1_contract(self) -> None:
+        request_text = "幫我把這個資料夾整理好。"
+        alias_status, alias_payload = self._post_json(
+            "/compile",
+            {"request": request_text},
+        )
+        v1_status, v1_payload = self._post_json(
+            "/v1/compile",
+            {"request": request_text},
+        )
+        self.assertEqual(alias_status, 200)
+        self.assertEqual(v1_status, 200)
+        self.assertEqual(alias_payload["ok"], v1_payload["ok"])
+        self.assertEqual(
+            alias_payload["result"]["input"]["request"],
+            v1_payload["result"]["input"]["request"],
+        )
+        self.assertEqual(
+            alias_payload["result"]["intent"]["task_type"],
+            v1_payload["result"]["intent"]["task_type"],
+        )
+        self.assertEqual(
+            alias_payload["result"]["route"]["recommended_agent"],
+            v1_payload["result"]["route"]["recommended_agent"],
+        )
+
     def test_missing_request_is_400(self) -> None:
         request = Request(
             f"http://127.0.0.1:{self.port}/v1/compile",
