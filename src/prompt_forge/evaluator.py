@@ -180,7 +180,12 @@ def evaluate_prompt(
     if continuation_policy != "SINGLE_CUT":
         hard_names.add("Continuation discipline")
     hard_pass = all(c.passed for c in checks if c.name in hard_names)
-    passed = score >= 8 and hard_pass
+
+    # The original 10-check evaluator required 8 passes. With the new
+    # continuation axis, require 9/11 so an automatically passing SINGLE_CUT
+    # continuation check cannot weaken the existing quality gate.
+    threshold = 9
+    passed = score >= threshold and hard_pass
 
     return EvalResult(
         checks=checks,
@@ -188,5 +193,5 @@ def evaluate_prompt(
         max_score=len(checks),
         hard_pass=hard_pass,
         passed=passed,
-        threshold=8,
+        threshold=threshold,
     )
