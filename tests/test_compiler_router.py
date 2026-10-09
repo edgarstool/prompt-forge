@@ -120,6 +120,38 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
         self.assertTrue(decision.should_compile)
 
+    def test_negated_english_continuation_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "Fix the first failing test, but do not keep working after the first step.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
+    def test_negated_chinese_continuation_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "只修第一個失敗測試，不要繼續做後面的工作。",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
+    def test_ordinary_english_until_task_complete_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Continue working until the task is complete.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_ordinary_english_until_completion_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Work on it until completion.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
 
 if __name__ == "__main__":
     unittest.main()
