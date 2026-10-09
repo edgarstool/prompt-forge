@@ -170,7 +170,7 @@ def _continuation_policy(req: UserRequest, decision: CompilationDecision) -> str
     if not decision.should_compile or decision.execution_mode == "DIRECT":
         return "SINGLE_CUT"
 
-    text = req.request.lower()
+    text = req.request.lower().replace("’", "'").replace("‘", "'")
 
     explicit_single_cut = _contains(
         text,
@@ -190,7 +190,7 @@ def _continuation_policy(req: UserRequest, decision: CompilationDecision) -> str
             r"直到.*(?:完成|做完|達成|結束)",
             r"(?:做到|一路做到|持續做到).*(?:完成|做完|達成)",
             r"(?:完成|做完|達成).*為止",
-            r"until\s+(?:(?:the\s+)?(?:task|goal|work)\s+(?:is\s+)?)?(?:done|complete|completed|finished|completion)\b",
+            r"until\s+(?:(?:(?:the\s+)?(?:task|goal|work)|it|everything)(?:\s+is|'s)?\s+)?(?:done|complete|completed|finished|completion)\b",
             r"(?:run|work(?:\s+on\s+it)?|continue(?:\s+working)?)\s+until\s+completion\b",
         ),
     )
