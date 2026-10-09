@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from .compiler import CONTINUATION_POLICIES
 from .schema import (
     HARD_EVAL_CHECKS,
     REQUIRED_PROMPT_SECTIONS,
@@ -80,34 +81,82 @@ def evaluate_prompt(
     )
 
     # 6 Stop conditions
-    stop_ok = _has_section(prompt, "Stop Conditions") and (
-        "Stop" in prompt.sections.get("Stop Conditions", "") or "停下" in prompt.sections.get("Stop Conditions", "")
+    stop_txt = prompt.sections.get("Stop Conditions", "")
+    stop_lower = stop_txt.lower()
+    stop_forbidden = bool(
+        re.search(r"\b(?:never\s+stop|do\s+not\s+stop|don't\s+stop|dont\s+stop)\b", stop_lower)
+    )
+    stop_ok = (
+        _has_section(prompt, "Stop Conditions")
+        and ("stop and report" in stop_lower or "停下" in stop_txt)
+        and not stop_forbidden
     )
     checks.append(
-        EvalCheck("Stop conditions", stop_ok, "Stop conditions present." if stop_ok else "Stop conditions missing.")
+        EvalCheck("Stop conditions", stop_ok, "Stop conditions present." if stop_ok else "Stop conditions missing or ineffective.")
     )
 
     # 7 Continuation discipline
-    continuation_policy = str(prompt.meta.get("continuation_policy") or "SINGLE_CUT")
-    if continuation_policy == "SINGLE_CUT":
+    raw_continuation_policy = prompt.meta.get("continuation_policy")
+    continuation_policy = str(raw_continuation_policy) if raw_continuation_policy is not None else None
+    semantic_contract = prompt.meta.get("semantic_contract")
+    semantic_policy = (
+        semantic_contract.get("continuation_policy")
+        if isinstance(semantic_contract, dict)
+        else None
+    )
+    metadata_ok = (
+        continuation_policy in CONTINUATION_POLICIES
+        and semantic_policy == continuation_policy
+    )
+
+    if not metadata_ok:
+        continuation_ok = False
+        continuation_detail = "Continuation policy metadata is missing, invalid, or inconsistent."
+    elif continuation_policy == "SINGLE_CUT":
         continuation_ok = True
-        continuation_detail = "Single-cut task does not require sustained continuation semantics."
+        continuation_detail = "Single-cut task has explicit, consistent continuation metadata."
     else:
         continuation_txt = prompt.sections.get("Continuation Policy", "")
         lower = continuation_txt.lower()
+        policy_marker_ok = f"Policy: `{continuation_policy}`." in continuation_txt
+        positive_continuation_ok = (
+            "after each bounded cut" in lower
+            and "if it is still incomplete" in lower
+            and "choose the highest-value next bounded cut" in lower
+            and "continue without asking the human" in lower
+        )
+        resource_guard_ok = (
+            "continuation does not authorize unlimited paid resource use" in lower
+            and "if no paid budget was granted, do not infer one" in lower
+        )
+        forbidden_continuation = bool(
+            re.search(r"\b(?:do\s+not|don't|dont|never)\s+continue\b", lower)
+        )
+        forbidden_resource = any(
+            phrase in lower
+            for phrase in (
+                "paid use is unlimited",
+                "paid resources are unlimited",
+                "unlimited paid",
+                "budget is unlimited",
+                "unlimited budget",
+                "unbounded paid",
+                "unbounded budget",
+            )
+        )
         continuation_ok = (
             _has_section(prompt, "Continuation Policy")
-            and "bounded cut" in lower
-            and "verify" in lower
-            and "persist" in lower
-            and "continue" in lower
-            and ("paid" in lower or "budget" in lower)
+            and policy_marker_ok
+            and positive_continuation_ok
+            and resource_guard_ok
+            and not forbidden_continuation
+            and not forbidden_resource
             and stop_ok
         )
         continuation_detail = (
-            "Sustained task carries verify/persist/reassess/continue semantics plus a resource guard."
+            "Sustained task carries consistent continuation semantics, effective stop gates, and bounded paid-resource rules."
             if continuation_ok
-            else "Sustained task is missing positive continuation discipline or runaway protection."
+            else "Sustained task is missing or contradicting continuation, stop, or resource-guard semantics."
         )
     checks.append(EvalCheck("Continuation discipline", continuation_ok, continuation_detail))
 
