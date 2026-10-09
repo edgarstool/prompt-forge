@@ -29,6 +29,12 @@ EXECUTION_MODES = (
     "STRATEGIC",
 )
 
+CONTINUATION_POLICIES = (
+    "SINGLE_CUT",
+    "CONTINUE_UNTIL_GOAL",
+    "CONTINUE_UNTIL_BLOCKED",
+)
+
 TRUTH_STATES = (
     "VERIFIED_CURRENT",
     "DATED_OBSERVATION",
@@ -60,6 +66,7 @@ class SemanticContract:
     methods: list[str]
     unknowns: list[str]
     truth_state: str
+    continuation_policy: str
     acceptance: str
     evidence_return: str
     write_back: str
@@ -108,6 +115,7 @@ def _looks_direct(text: str) -> bool:
             r"幫我.*(?:做|修|改|部署|建立|執行|搬|整理)",
             r"請.*(?:做|修|改|部署|建立|執行)",
             r"每小時|每天|每週|排程|定期",
+            r"\b(?:can|could|will|would)\s+you\s+(?:keep\s+working|continue(?:\s+working)?|work(?:\s+on\s+it)?)\b.*\buntil\b",
         ),
     )
     return question and not action and not _is_explicit_handoff(text)
@@ -151,6 +159,65 @@ def _execution_mode(req: UserRequest, intent: IntentResult) -> CompilationDecisi
     return CompilationDecision("EXECUTION_HANDOFF", True, ["fallback-handoff"])
 
 
+def _continuation_policy(req: UserRequest, decision: CompilationDecision) -> str:
+    """Resolve how far the executor should continue after one verified cut.
+
+    Continuation is intentionally orthogonal to execution mode. A BUILD can be
+    single-cut or sustained; DIRECT answers stay single-cut. Explicit negation
+    or a clear one-cut boundary wins over positive continuation keywords so the
+    compiler never reverses the user's requested execution boundary.
+    """
+
+    if not decision.should_compile or decision.execution_mode == "DIRECT":
+        return "SINGLE_CUT"
+
+    text = req.request.lower().replace("’", "'").replace("‘", "'")
+
+    explicit_single_cut = _contains(
+        text,
+        (
+            r"(?:do\s+not|don't|dont|never)\s+(?:keep|continue)\s+(?:going|working|work)",
+            r"(?:do\s+not|don't|dont|never)\s+continue\b",
+            r"(?:do\s+not|don't|dont|never)\s+(?:finish|complete)\b",
+            r"\bonly\s+(?:do|fix|handle|perform|run|work\s+on)\b.{0,100}\b(?:the\s+)?first\s+(?:step|task|item|test)\b",
+            r"(?:不要|別|不可)(?:再)?(?:繼續|接著|持續)(?:做|執行|施工|工作|處理|推進)?",
+            r"(?:不要|別|不可)(?:再)?(?:做到|做完|完成|達成)",
+            r"(?:只|僅)(?:做|處理|修|執行).{0,80}(?:第一步|第一個|一個|一項)",
+        ),
+    )
+    if explicit_single_cut:
+        return "SINGLE_CUT"
+
+    until_goal = _contains(
+        text,
+        (
+            r"直到.*(?:完成|做完|達成|結束)",
+            r"(?:做到|一路做到|持續做到).*(?:完成|做完|達成)",
+            r"(?:完成|做完|達成).*為止",
+            r"until\s+(?:(?:(?:the\s+)?(?:task|goal|work)|it|everything)(?:\s+is|'s)?\s+)?(?:done|complete|completed|finished|completion)\b",
+            r"(?:run|work(?:\s+on\s+it)?|continue(?:\s+working)?)\s+until\s+completion\b",
+        ),
+    )
+    if until_goal:
+        return "CONTINUE_UNTIL_GOAL"
+
+    until_blocked = _contains(
+        text,
+        (
+            r"不要.*(?:停|停下|停工)",
+            r"(?:持續|繼續|接著).*(?:做|執行|施工|推進)",
+            r"只有.*(?:授權|批准|人工|人類|我).*(?:才停|再停|停下)",
+            r"直到.*(?:阻塞|卡住|需要.*授權|需要.*批准)",
+            r"continue\s+until\s+blocked",
+            r"keep\s+(?:going|working)",
+        ),
+    )
+    if until_blocked:
+        return "CONTINUE_UNTIL_BLOCKED"
+
+    return "SINGLE_CUT"
+
+
 def _truth_state(known_context: list[str]) -> str:
     upper = "\n".join(known_context).upper()
     for state in TRUTH_STATES:
@@ -186,6 +253,7 @@ def compile_request(
     """Compile request semantics before rendering the executable prompt."""
 
     decision = _execution_mode(req, intent)
+    continuation_policy = _continuation_policy(req, decision)
     evidence = req.known_context[:] or ["No verified evidence supplied to this compile request."]
     constraints = req.constraints[:]
     if risk.level == "high":
@@ -231,6 +299,7 @@ def compile_request(
         methods=methods,
         unknowns=unknowns or ["No material unknowns identified from supplied input."],
         truth_state=_truth_state(req.known_context),
+        continuation_policy=continuation_policy,
         acceptance=_acceptance(decision, req, risk),
         evidence_return=(
             "Return an evidence package describing what changed, where, verification performed, observed result, "

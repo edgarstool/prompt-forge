@@ -13,10 +13,17 @@ Composer fills these sections for every local run:
 9. Stop Conditions
 10. Output Format
 
-Optional when risk/task needs them:
+Optional when task/risk needs them:
 
+- Continuation Policy
+- Authority & Context
+- Execution Freedom
+- Evidence Return
+- Write-back
 - Branch / Worktree Isolation
 - Rollback
 - Forbidden Actions
 - Context Freshness
 - Constraints
+
+`Continuation Policy` is emitted only for sustained tasks. It is orthogonal to execution mode and defines whether the executor stops after one bounded cut or continues through verified bounded cuts until the parent goal or a real gate is reached. See `docs/CONTINUATION-POLICY.md`.

@@ -1,9 +1,10 @@
-"""Prompt evaluation (10 binary checks)."""
+"""Prompt evaluation (11 binary checks)."""
 
 from __future__ import annotations
 
 import re
 
+from .compiler import CONTINUATION_POLICIES
 from .schema import (
     HARD_EVAL_CHECKS,
     REQUIRED_PROMPT_SECTIONS,
@@ -80,14 +81,86 @@ def evaluate_prompt(
     )
 
     # 6 Stop conditions
-    stop_ok = _has_section(prompt, "Stop Conditions") and (
-        "Stop" in prompt.sections.get("Stop Conditions", "") or "停下" in prompt.sections.get("Stop Conditions", "")
+    stop_txt = prompt.sections.get("Stop Conditions", "")
+    stop_lower = stop_txt.lower()
+    stop_forbidden = bool(
+        re.search(r"\b(?:never\s+stop|do\s+not\s+stop|don't\s+stop|dont\s+stop)\b", stop_lower)
+    )
+    stop_ok = (
+        _has_section(prompt, "Stop Conditions")
+        and ("stop and report" in stop_lower or "停下" in stop_txt)
+        and not stop_forbidden
     )
     checks.append(
-        EvalCheck("Stop conditions", stop_ok, "Stop conditions present." if stop_ok else "Stop conditions missing.")
+        EvalCheck("Stop conditions", stop_ok, "Stop conditions present." if stop_ok else "Stop conditions missing or ineffective.")
     )
 
-    # 7 Assumption discipline
+    # 7 Continuation discipline
+    raw_continuation_policy = prompt.meta.get("continuation_policy")
+    continuation_policy = str(raw_continuation_policy) if raw_continuation_policy is not None else None
+    semantic_contract = prompt.meta.get("semantic_contract")
+    semantic_policy = (
+        semantic_contract.get("continuation_policy")
+        if isinstance(semantic_contract, dict)
+        else None
+    )
+    metadata_ok = (
+        continuation_policy in CONTINUATION_POLICIES
+        and semantic_policy == continuation_policy
+    )
+
+    if not metadata_ok:
+        continuation_ok = False
+        continuation_detail = "Continuation policy metadata is missing, invalid, or inconsistent."
+    elif continuation_policy == "SINGLE_CUT":
+        continuation_ok = True
+        continuation_detail = "Single-cut task has explicit, consistent continuation metadata."
+    else:
+        continuation_txt = prompt.sections.get("Continuation Policy", "")
+        lower = continuation_txt.lower()
+        policy_marker_ok = f"Policy: `{continuation_policy}`." in continuation_txt
+        positive_continuation_ok = (
+            "after each bounded cut" in lower
+            and "if it is still incomplete" in lower
+            and "choose the highest-value next bounded cut" in lower
+            and "continue without asking the human" in lower
+        )
+        resource_guard_ok = (
+            "continuation does not authorize unlimited paid resource use" in lower
+            and "if no paid budget was granted, do not infer one" in lower
+        )
+        forbidden_continuation = bool(
+            re.search(r"\b(?:do\s+not|don't|dont|never)\s+continue\b", lower)
+        )
+        # Match clearly permissive resource statements, not the canonical
+        # negative guard "does not authorize unlimited paid resource use".
+        forbidden_resource = any(
+            phrase in lower
+            for phrase in (
+                "paid use is unlimited",
+                "paid resources are unlimited",
+                "budget is unlimited",
+                "unlimited budget",
+                "unbounded budget",
+            )
+        )
+        continuation_ok = (
+            _has_section(prompt, "Continuation Policy")
+            and policy_marker_ok
+            and positive_continuation_ok
+            and resource_guard_ok
+            and not forbidden_continuation
+            and not forbidden_resource
+            and stop_ok
+        )
+        continuation_detail = (
+            "Sustained task carries consistent continuation semantics, effective stop gates, and bounded paid-resource rules."
+            if continuation_ok
+            else "Sustained task is missing or contradicting continuation, stop, or resource-guard semantics."
+        )
+    checks.append(EvalCheck("Continuation discipline", continuation_ok, continuation_detail))
+
+    # 8 Assumption discipline
     assume_ok = _has_section(prompt, "Assumptions") and not re.search(
         r"請先回答以下\d+個問題|ask the user all missing details", text, flags=re.I
     )
@@ -101,7 +174,7 @@ def evaluate_prompt(
         )
     )
 
-    # 8 Context freshness
+    # 9 Context freshness
     if ctx.use_context7:
         fresh_ok = (
             "Context7" in text
@@ -110,7 +183,6 @@ def evaluate_prompt(
         )
         detail = "Context7/docs requirement present." if fresh_ok else "Needed Context7 but missing."
     else:
-        # pass if we did NOT unnecessarily inject Context7 for local/secret tasks
         unnecessary = "Context7" in text and intent.task_type in {"local-files", "deterministic-tool"}
         fresh_ok = not unnecessary
         detail = (
@@ -120,9 +192,8 @@ def evaluate_prompt(
         )
     checks.append(EvalCheck("Context freshness", fresh_ok, detail))
 
-    # 9 Proportional safety
+    # 10 Proportional safety
     if risk.level == "low":
-        # fail if oversized ceremony
         ceremony = len(re.findall(r"Forbidden Actions|Rollback|multi-party approval", text))
         prop_ok = ceremony <= 2 and "change advisory board" not in text.lower()
         detail = "Low-risk prompt stays light." if prop_ok else "Over-weighted safety for low risk."
@@ -139,8 +210,7 @@ def evaluate_prompt(
         detail = "Medium-risk isolation/guidance proportional." if prop_ok else "Medium-risk controls weak."
     checks.append(EvalCheck("Proportional safety", prop_ok, detail))
 
-    # 10 Concision
-    # soft heuristic: not a novel; still complete
+    # 11 Concision
     wordish = len(text)
     concise_ok = 400 <= wordish <= 9000 and text.count("## ") <= 20
     checks.append(
@@ -152,8 +222,13 @@ def evaluate_prompt(
     )
 
     score = sum(1 for c in checks if c.passed)
-    hard_pass = all(c.passed for c in checks if c.name in HARD_EVAL_CHECKS)
-    passed = score >= 8 and hard_pass
+    hard_names = set(HARD_EVAL_CHECKS)
+    if not metadata_ok or continuation_policy != "SINGLE_CUT":
+        hard_names.add("Continuation discipline")
+    hard_pass = all(c.passed for c in checks if c.name in hard_names)
+
+    threshold = 9
+    passed = score >= threshold and hard_pass
 
     return EvalResult(
         checks=checks,
@@ -161,5 +236,5 @@ def evaluate_prompt(
         max_score=len(checks),
         hard_pass=hard_pass,
         passed=passed,
-        threshold=8,
+        threshold=threshold,
     )
