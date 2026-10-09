@@ -38,6 +38,7 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertTrue(contract.goal)
         self.assertIn("observable", contract.acceptance.lower())
         self.assertIn("evidence", contract.evidence_return.lower())
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
 
     def test_browser_operator_mode_detected(self):
         decision, contract = self._compile(
@@ -84,6 +85,7 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertEqual(decision.execution_mode, "DIRECT")
         self.assertFalse(decision.should_compile)
         self.assertTrue(contract.goal)
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
 
     def test_semantic_slots_stay_distinct(self):
         decision, contract = self._compile(
@@ -96,6 +98,27 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertNotEqual(contract.evidence, contract.constraints)
         self.assertEqual(contract.truth_state, "VERIFIED_CURRENT")
         self.assertIn("Do not change billing", contract.constraints)
+
+    def test_sustained_execution_is_orthogonal_to_build_mode(self):
+        decision, contract = self._compile(
+            {
+                "request": "持續把這個 repo 的 Auth 主線做下去，不要做一點就停，只有真的需要我授權才停。",
+                "preferred_agent": "warp",
+                "known_context": ["The repo and current auth work already exist."],
+            }
+        )
+        self.assertEqual(decision.execution_mode, "BUILD")
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_BLOCKED")
+        self.assertTrue(decision.should_compile)
+
+    def test_until_goal_request_uses_goal_horizon(self):
+        decision, contract = self._compile(
+            {
+                "request": "把這個 migration 做到完成為止；每一刀都驗證後繼續，直到整個目標完成。",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+        self.assertTrue(decision.should_compile)
 
 
 if __name__ == "__main__":
