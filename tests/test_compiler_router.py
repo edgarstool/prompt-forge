@@ -184,6 +184,32 @@ class CompilerRouterTests(unittest.TestCase):
         )
         self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
 
+    def test_continuation_question_does_not_collapse_to_direct(self):
+        decision, contract = self._compile(
+            {
+                "request": "Can you keep working until the task is complete?",
+            }
+        )
+        self.assertNotEqual(decision.execution_mode, "DIRECT")
+        self.assertTrue(decision.should_compile)
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_negated_goal_completion_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "只修第一個失敗測試，不要做到整個目標完成為止。",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
+    def test_only_first_step_stays_single_cut_even_with_completion_words(self):
+        _, contract = self._compile(
+            {
+                "request": "Only do the first step; do not complete the whole task.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
 
 if __name__ == "__main__":
     unittest.main()
