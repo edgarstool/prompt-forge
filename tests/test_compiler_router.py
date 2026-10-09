@@ -136,6 +136,14 @@ class CompilerRouterTests(unittest.TestCase):
         )
         self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
 
+    def test_smart_apostrophe_negation_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "Fix the first failing test, but Don’t keep working after the first step.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
     def test_ordinary_english_until_task_complete_uses_goal_horizon(self):
         _, contract = self._compile(
             {
@@ -148,6 +156,30 @@ class CompilerRouterTests(unittest.TestCase):
         _, contract = self._compile(
             {
                 "request": "Work on it until completion.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_pronoun_it_until_done_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Continue until it is done.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_pronoun_contraction_until_finished_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Do not stop until it's finished.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_everything_until_done_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Continue through every step until everything is done.",
             }
         )
         self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
