@@ -162,7 +162,9 @@ def _continuation_policy(req: UserRequest, decision: CompilationDecision) -> str
     """Resolve how far the executor should continue after one verified cut.
 
     Continuation is intentionally orthogonal to execution mode. A BUILD can be
-    single-cut or sustained; DIRECT answers stay single-cut.
+    single-cut or sustained; DIRECT answers stay single-cut. Explicit negation
+    of continuation wins over positive continuation keywords so the compiler
+    never reverses a requested single-cut boundary.
     """
 
     if not decision.should_compile or decision.execution_mode == "DIRECT":
@@ -170,14 +172,26 @@ def _continuation_policy(req: UserRequest, decision: CompilationDecision) -> str
 
     text = req.request.lower()
 
+    explicit_single_cut = _contains(
+        text,
+        (
+            r"(?:do\s+not|don't|dont|never)\s+(?:keep|continue)\s+(?:going|working|work)",
+            r"(?:do\s+not|don't|dont|never)\s+continue\b",
+            r"(?:不要|別|不可)(?:再)?(?:繼續|接著|持續)(?:做|執行|施工|工作|處理|推進)?",
+            r"(?:只|僅)(?:做|處理|修|執行).*(?:一個|一項|第一個|第一步).*(?:就停|後停止|後就停|不要再做)",
+        ),
+    )
+    if explicit_single_cut:
+        return "SINGLE_CUT"
+
     until_goal = _contains(
         text,
         (
             r"直到.*(?:完成|做完|達成|結束)",
             r"(?:做到|一路做到|持續做到).*(?:完成|做完|達成)",
             r"(?:完成|做完|達成).*為止",
-            r"until\s+(?:the\s+)?(?:goal\s+is\s+)?(?:done|complete|completed|finished)",
-            r"run\s+until\s+completion",
+            r"until\s+(?:(?:the\s+)?(?:task|goal|work)\s+(?:is\s+)?)?(?:done|complete|completed|finished|completion)\b",
+            r"(?:run|work(?:\s+on\s+it)?|continue(?:\s+working)?)\s+until\s+completion\b",
         ),
     )
     if until_goal:
