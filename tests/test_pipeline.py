@@ -55,6 +55,28 @@ class PipelineCaseTests(unittest.TestCase):
         self.assertTrue(result.risk.forbid_external_secret_exfil)
         self.assertFalse(result.context_policy.use_context7)
 
+    def test_sustained_execution_compiles_positive_continuation_contract(self):
+        result = run_pipeline(
+            {
+                "request": "持續把這個 repo 的 Auth 主線做下去，不要做一點就停，只有真的需要我授權才停。",
+                "preferred_agent": "warp",
+                "known_context": ["The repo and current auth work already exist."],
+            }
+        )
+        self.assertEqual(result.composition.meta["continuation_policy"], "CONTINUE_UNTIL_BLOCKED")
+        continuation = result.composition.sections["Continuation Policy"]
+        self.assertIn("bounded cut", continuation.lower())
+        self.assertIn("verify", continuation.lower())
+        self.assertIn("persist", continuation.lower())
+        self.assertIn("continue", continuation.lower())
+        self.assertIn("paid", continuation.lower())
+        self.assertIn("Stop Conditions", result.composition.sections)
+
+        checks = {check.name: check for check in result.evaluation.checks}
+        self.assertIn("Continuation discipline", checks)
+        self.assertTrue(checks["Continuation discipline"].passed)
+        self.assertTrue(result.evaluation.passed)
+
 
 if __name__ == "__main__":
     unittest.main()
