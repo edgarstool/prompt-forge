@@ -1,4 +1,4 @@
-"""Prompt evaluation (10 binary checks)."""
+"""Prompt evaluation (11 binary checks)."""
 
 from __future__ import annotations
 
@@ -87,7 +87,31 @@ def evaluate_prompt(
         EvalCheck("Stop conditions", stop_ok, "Stop conditions present." if stop_ok else "Stop conditions missing.")
     )
 
-    # 7 Assumption discipline
+    # 7 Continuation discipline
+    continuation_policy = str(prompt.meta.get("continuation_policy") or "SINGLE_CUT")
+    if continuation_policy == "SINGLE_CUT":
+        continuation_ok = True
+        continuation_detail = "Single-cut task does not require sustained continuation semantics."
+    else:
+        continuation_txt = prompt.sections.get("Continuation Policy", "")
+        lower = continuation_txt.lower()
+        continuation_ok = (
+            _has_section(prompt, "Continuation Policy")
+            and "bounded cut" in lower
+            and "verify" in lower
+            and "persist" in lower
+            and "continue" in lower
+            and ("paid" in lower or "budget" in lower)
+            and stop_ok
+        )
+        continuation_detail = (
+            "Sustained task carries verify/persist/reassess/continue semantics plus a resource guard."
+            if continuation_ok
+            else "Sustained task is missing positive continuation discipline or runaway protection."
+        )
+    checks.append(EvalCheck("Continuation discipline", continuation_ok, continuation_detail))
+
+    # 8 Assumption discipline
     assume_ok = _has_section(prompt, "Assumptions") and not re.search(
         r"請先回答以下\d+個問題|ask the user all missing details", text, flags=re.I
     )
@@ -101,7 +125,7 @@ def evaluate_prompt(
         )
     )
 
-    # 8 Context freshness
+    # 9 Context freshness
     if ctx.use_context7:
         fresh_ok = (
             "Context7" in text
@@ -120,7 +144,7 @@ def evaluate_prompt(
         )
     checks.append(EvalCheck("Context freshness", fresh_ok, detail))
 
-    # 9 Proportional safety
+    # 10 Proportional safety
     if risk.level == "low":
         # fail if oversized ceremony
         ceremony = len(re.findall(r"Forbidden Actions|Rollback|multi-party approval", text))
@@ -139,7 +163,7 @@ def evaluate_prompt(
         detail = "Medium-risk isolation/guidance proportional." if prop_ok else "Medium-risk controls weak."
     checks.append(EvalCheck("Proportional safety", prop_ok, detail))
 
-    # 10 Concision
+    # 11 Concision
     # soft heuristic: not a novel; still complete
     wordish = len(text)
     concise_ok = 400 <= wordish <= 9000 and text.count("## ") <= 20
@@ -152,7 +176,10 @@ def evaluate_prompt(
     )
 
     score = sum(1 for c in checks if c.passed)
-    hard_pass = all(c.passed for c in checks if c.name in HARD_EVAL_CHECKS)
+    hard_names = set(HARD_EVAL_CHECKS)
+    if continuation_policy != "SINGLE_CUT":
+        hard_names.add("Continuation discipline")
+    hard_pass = all(c.passed for c in checks if c.name in hard_names)
     passed = score >= 8 and hard_pass
 
     return EvalResult(
