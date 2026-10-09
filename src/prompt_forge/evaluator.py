@@ -132,15 +132,15 @@ def evaluate_prompt(
         forbidden_continuation = bool(
             re.search(r"\b(?:do\s+not|don't|dont|never)\s+continue\b", lower)
         )
+        # Match clearly permissive resource statements, not the canonical
+        # negative guard "does not authorize unlimited paid resource use".
         forbidden_resource = any(
             phrase in lower
             for phrase in (
                 "paid use is unlimited",
                 "paid resources are unlimited",
-                "unlimited paid",
                 "budget is unlimited",
                 "unlimited budget",
-                "unbounded paid",
                 "unbounded budget",
             )
         )
@@ -183,7 +183,6 @@ def evaluate_prompt(
         )
         detail = "Context7/docs requirement present." if fresh_ok else "Needed Context7 but missing."
     else:
-        # pass if we did NOT unnecessarily inject Context7 for local/secret tasks
         unnecessary = "Context7" in text and intent.task_type in {"local-files", "deterministic-tool"}
         fresh_ok = not unnecessary
         detail = (
@@ -195,7 +194,6 @@ def evaluate_prompt(
 
     # 10 Proportional safety
     if risk.level == "low":
-        # fail if oversized ceremony
         ceremony = len(re.findall(r"Forbidden Actions|Rollback|multi-party approval", text))
         prop_ok = ceremony <= 2 and "change advisory board" not in text.lower()
         detail = "Low-risk prompt stays light." if prop_ok else "Over-weighted safety for low risk."
@@ -213,7 +211,6 @@ def evaluate_prompt(
     checks.append(EvalCheck("Proportional safety", prop_ok, detail))
 
     # 11 Concision
-    # soft heuristic: not a novel; still complete
     wordish = len(text)
     concise_ok = 400 <= wordish <= 9000 and text.count("## ") <= 20
     checks.append(
@@ -230,9 +227,6 @@ def evaluate_prompt(
         hard_names.add("Continuation discipline")
     hard_pass = all(c.passed for c in checks if c.name in hard_names)
 
-    # The original 10-check evaluator required 8 passes. With the new
-    # continuation axis, require 9/11 so an automatically passing SINGLE_CUT
-    # continuation check cannot weaken the existing quality gate.
     threshold = 9
     passed = score >= threshold and hard_pass
 
