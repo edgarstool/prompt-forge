@@ -29,6 +29,12 @@ EXECUTION_MODES = (
     "STRATEGIC",
 )
 
+CONTINUATION_POLICIES = (
+    "SINGLE_CUT",
+    "CONTINUE_UNTIL_GOAL",
+    "CONTINUE_UNTIL_BLOCKED",
+)
+
 TRUTH_STATES = (
     "VERIFIED_CURRENT",
     "DATED_OBSERVATION",
@@ -60,6 +66,7 @@ class SemanticContract:
     methods: list[str]
     unknowns: list[str]
     truth_state: str
+    continuation_policy: str
     acceptance: str
     evidence_return: str
     write_back: str
@@ -151,6 +158,48 @@ def _execution_mode(req: UserRequest, intent: IntentResult) -> CompilationDecisi
     return CompilationDecision("EXECUTION_HANDOFF", True, ["fallback-handoff"])
 
 
+def _continuation_policy(req: UserRequest, decision: CompilationDecision) -> str:
+    """Resolve how far the executor should continue after one verified cut.
+
+    Continuation is intentionally orthogonal to execution mode. A BUILD can be
+    single-cut or sustained; DIRECT answers stay single-cut.
+    """
+
+    if not decision.should_compile or decision.execution_mode == "DIRECT":
+        return "SINGLE_CUT"
+
+    text = req.request.lower()
+
+    until_goal = _contains(
+        text,
+        (
+            r"直到.*(?:完成|做完|達成|結束)",
+            r"(?:做到|一路做到|持續做到).*(?:完成|做完|達成)",
+            r"(?:完成|做完|達成).*為止",
+            r"until\s+(?:the\s+)?(?:goal\s+is\s+)?(?:done|complete|completed|finished)",
+            r"run\s+until\s+completion",
+        ),
+    )
+    if until_goal:
+        return "CONTINUE_UNTIL_GOAL"
+
+    until_blocked = _contains(
+        text,
+        (
+            r"不要.*(?:停|停下|停工)",
+            r"(?:持續|繼續|接著).*(?:做|執行|施工|推進)",
+            r"只有.*(?:授權|批准|人工|人類|我).*(?:才停|再停|停下)",
+            r"直到.*(?:阻塞|卡住|需要.*授權|需要.*批准)",
+            r"continue\s+until\s+blocked",
+            r"keep\s+(?:going|working)",
+        ),
+    )
+    if until_blocked:
+        return "CONTINUE_UNTIL_BLOCKED"
+
+    return "SINGLE_CUT"
+
+
 def _truth_state(known_context: list[str]) -> str:
     upper = "\n".join(known_context).upper()
     for state in TRUTH_STATES:
@@ -186,6 +235,7 @@ def compile_request(
     """Compile request semantics before rendering the executable prompt."""
 
     decision = _execution_mode(req, intent)
+    continuation_policy = _continuation_policy(req, decision)
     evidence = req.known_context[:] or ["No verified evidence supplied to this compile request."]
     constraints = req.constraints[:]
     if risk.level == "high":
@@ -231,6 +281,7 @@ def compile_request(
         methods=methods,
         unknowns=unknowns or ["No material unknowns identified from supplied input."],
         truth_state=_truth_state(req.known_context),
+        continuation_policy=continuation_policy,
         acceptance=_acceptance(decision, req, risk),
         evidence_return=(
             "Return an evidence package describing what changed, where, verification performed, observed result, "
