@@ -223,7 +223,7 @@ def evaluate_prompt(
 
     score = sum(1 for c in checks if c.passed)
     hard_names = set(HARD_EVAL_CHECKS)
-    if continuation_policy != "SINGLE_CUT":
+    if not metadata_ok or continuation_policy != "SINGLE_CUT":
         hard_names.add("Continuation discipline")
     hard_pass = all(c.passed for c in checks if c.name in hard_names)
 
