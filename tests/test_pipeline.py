@@ -55,6 +55,18 @@ class PipelineCaseTests(unittest.TestCase):
         self.assertTrue(result.risk.forbid_external_secret_exfil)
         self.assertFalse(result.context_policy.use_context7)
 
+    def test_new_evaluator_axis_does_not_weaken_existing_pass_threshold(self):
+        result = run_pipeline(
+            {
+                "request": "給 Codex 一個任務，把登入 callback bug 修好並驗證。",
+                "preferred_agent": "codex",
+                "known_context": ["Repo exists and the failure is reproducible."],
+            }
+        )
+        self.assertEqual(result.composition.meta["continuation_policy"], "SINGLE_CUT")
+        self.assertEqual(result.evaluation.max_score, 11)
+        self.assertEqual(result.evaluation.threshold, 9)
+
     def test_sustained_execution_compiles_positive_continuation_contract(self):
         result = run_pipeline(
             {
