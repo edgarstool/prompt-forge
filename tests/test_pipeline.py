@@ -1,3 +1,4 @@
+import copy
 import json
 import sys
 import unittest
@@ -8,6 +9,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from prompt_forge.evaluator import evaluate_prompt  # noqa: E402
 from prompt_forge.pipeline import run_pipeline  # noqa: E402
 from prompt_forge.schema import REQUIRED_PROMPT_SECTIONS  # noqa: E402
 
@@ -32,6 +34,16 @@ class PipelineCaseTests(unittest.TestCase):
         for section in REQUIRED_PROMPT_SECTIONS:
             self.assertIn(section, result.composition.sections)
             self.assertTrue(result.composition.sections[section].strip())
+
+    def _reevaluate(self, result, prompt):
+        return evaluate_prompt(
+            result.input,
+            result.intent,
+            result.risk,
+            result.route,
+            result.context_policy,
+            prompt,
+        )
 
     def test_case_a_local_files(self):
         self._assert_case("case_a_local_files.json")
@@ -88,6 +100,42 @@ class PipelineCaseTests(unittest.TestCase):
         self.assertIn("Continuation discipline", checks)
         self.assertTrue(checks["Continuation discipline"].passed)
         self.assertTrue(result.evaluation.passed)
+
+    def test_missing_continuation_policy_metadata_fails_closed(self):
+        result = run_pipeline(
+            {
+                "request": "持續把這個 repo 做下去，只有真的被阻塞才停。",
+                "known_context": ["Repo exists."],
+            }
+        )
+        prompt = copy.deepcopy(result.composition)
+        prompt.meta.pop("continuation_policy", None)
+
+        evaluation = self._reevaluate(result, prompt)
+        checks = {check.name: check for check in evaluation.checks}
+        self.assertFalse(checks["Continuation discipline"].passed)
+        self.assertFalse(evaluation.hard_pass)
+        self.assertFalse(evaluation.passed)
+
+    def test_adversarial_continuation_prose_fails_hard_check(self):
+        result = run_pipeline(
+            {
+                "request": "持續把這個 repo 做下去，只有真的被阻塞才停。",
+                "known_context": ["Repo exists."],
+            }
+        )
+        prompt = copy.deepcopy(result.composition)
+        prompt.sections["Continuation Policy"] = (
+            "Policy: `CONTINUE_UNTIL_BLOCKED`. After each bounded cut, verify and persist; "
+            "do not continue. Paid use is unlimited. budget budget."
+        )
+        prompt.sections["Stop Conditions"] = "Never Stop."
+
+        evaluation = self._reevaluate(result, prompt)
+        checks = {check.name: check for check in evaluation.checks}
+        self.assertFalse(checks["Continuation discipline"].passed)
+        self.assertFalse(evaluation.hard_pass)
+        self.assertFalse(evaluation.passed)
 
 
 if __name__ == "__main__":
