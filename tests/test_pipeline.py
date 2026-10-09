@@ -117,6 +117,26 @@ class PipelineCaseTests(unittest.TestCase):
         self.assertFalse(evaluation.hard_pass)
         self.assertFalse(evaluation.passed)
 
+    def test_inconsistent_single_cut_metadata_fails_hard(self):
+        result = run_pipeline(
+            {
+                "request": "持續把這個 repo 做下去，直到整個目標完成。",
+                "known_context": ["Repo exists."],
+            }
+        )
+        prompt = copy.deepcopy(result.composition)
+        self.assertNotEqual(
+            prompt.meta["semantic_contract"]["continuation_policy"],
+            "SINGLE_CUT",
+        )
+        prompt.meta["continuation_policy"] = "SINGLE_CUT"
+
+        evaluation = self._reevaluate(result, prompt)
+        checks = {check.name: check for check in evaluation.checks}
+        self.assertFalse(checks["Continuation discipline"].passed)
+        self.assertFalse(evaluation.hard_pass)
+        self.assertFalse(evaluation.passed)
+
     def test_adversarial_continuation_prose_fails_hard_check(self):
         result = run_pipeline(
             {
