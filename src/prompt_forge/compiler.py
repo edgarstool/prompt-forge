@@ -115,7 +115,7 @@ def _looks_direct(text: str) -> bool:
             r"幫我.*(?:做|修|改|部署|建立|執行|搬|整理)",
             r"請.*(?:做|修|改|部署|建立|執行)",
             r"每小時|每天|每週|排程|定期",
-            r"\b(?:can|could|will|would)\s+you\s+(?:keep\s+working|continue(?:\s+working)?|work(?:\s+on\s+it)?)\b.*\buntil\b",
+            r"\b(?:can|could|will|would)\s+you\s+(?:please\s+)?(?:keep\s+working|continue(?:\s+working)?|work(?:\s+on\s+it)?)\b.*\buntil\b",
         ),
     )
     return question and not action and not _is_explicit_handoff(text)
@@ -173,22 +173,35 @@ def _continuation_policy(req: UserRequest, decision: CompilationDecision) -> str
 
     text = req.request.lower().replace("’", "'").replace("‘", "'")
 
+    conditional_completion_horizon = _contains(
+        text,
+        (
+            r"(?:do\s+not|don't|dont|never)\s+(?:finish|complete)\b[^.;]*\buntil\b",
+        ),
+    )
     explicit_single_cut = _contains(
         text,
         (
             r"(?:do\s+not|don't|dont|never)\s+(?:keep|continue)\s+(?:going|working|work)",
             r"(?:do\s+not|don't|dont|never)\s+continue\b",
-            r"(?:do\s+not|don't|dont|never)\s+(?:finish|complete)\b",
             r"\bonly\s+(?:do|fix|handle|perform|run|work\s+on)\b.{0,100}\b(?:the\s+)?first\s+(?:step|task|item|test)\b",
             r"(?:不要|別|不可)(?:再)?(?:繼續|接著|持續)(?:做|執行|施工|工作|處理|推進)?",
             r"(?:不要|別|不可)(?:再)?(?:做到|做完|完成|達成)",
             r"(?:只|僅)(?:做|處理|修|執行).{0,80}(?:第一步|第一個|一個|一項)",
         ),
     )
-    if explicit_single_cut:
+    explicit_completion_negation = _contains(
+        text,
+        (
+            r"(?:do\s+not|don't|dont|never)\s+(?:finish|complete)\b",
+        ),
+    )
+    if explicit_single_cut or (
+        explicit_completion_negation and not conditional_completion_horizon
+    ):
         return "SINGLE_CUT"
 
-    until_goal = _contains(
+    until_goal = conditional_completion_horizon or _contains(
         text,
         (
             r"直到.*(?:完成|做完|達成|結束)",

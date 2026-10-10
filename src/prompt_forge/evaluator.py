@@ -108,10 +108,17 @@ def evaluate_prompt(
         continuation_policy in CONTINUATION_POLICIES
         and semantic_policy == continuation_policy
     )
+    single_cut_contradiction = (
+        continuation_policy == "SINGLE_CUT"
+        and _has_section(prompt, "Continuation Policy")
+    )
 
     if not metadata_ok:
         continuation_ok = False
         continuation_detail = "Continuation policy metadata is missing, invalid, or inconsistent."
+    elif single_cut_contradiction:
+        continuation_ok = False
+        continuation_detail = "Single-cut metadata contradicts the rendered continuation policy."
     elif continuation_policy == "SINGLE_CUT":
         continuation_ok = True
         continuation_detail = "Single-cut task has explicit, consistent continuation metadata."
@@ -223,7 +230,11 @@ def evaluate_prompt(
 
     score = sum(1 for c in checks if c.passed)
     hard_names = set(HARD_EVAL_CHECKS)
-    if not metadata_ok or continuation_policy != "SINGLE_CUT":
+    if (
+        not metadata_ok
+        or continuation_policy != "SINGLE_CUT"
+        or single_cut_contradiction
+    ):
         hard_names.add("Continuation discipline")
     hard_pass = all(c.passed for c in checks if c.name in hard_names)
 
