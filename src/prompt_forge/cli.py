@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .codebase_router import resolve_codebase
 from .pipeline import run_pipeline
 from .schema import UserRequest
 
@@ -140,6 +141,11 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return 0 if failed == 0 else 1
 
 
+def cmd_route_codebase(args: argparse.Namespace) -> int:
+    print(json.dumps(resolve_codebase(args.request), ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_show_io(_: argparse.Namespace) -> int:
     print(
         """
@@ -189,6 +195,10 @@ def build_parser() -> argparse.ArgumentParser:
     eval_p.add_argument("--only", nargs="*", default=None)
     eval_p.add_argument("--verbose", action="store_true")
     eval_p.set_defaults(func=cmd_eval)
+
+    repo_p = sub.add_parser("route-codebase", help="Read-only candidate repository selection")
+    repo_p.add_argument("--request", required=True, help="EDGAR-OS task description")
+    repo_p.set_defaults(func=cmd_route_codebase)
 
     io_p = sub.add_parser("io", help="Print stage input/output contracts")
     io_p.set_defaults(func=cmd_show_io)
