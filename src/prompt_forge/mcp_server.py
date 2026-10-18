@@ -13,6 +13,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .codebase_router import resolve_codebase
 from .pipeline import run_pipeline
 from .service import SERVICE_NAME, SERVICE_VERSION
 
@@ -60,6 +61,19 @@ def prompt_forge_compile(
     }
     result = run_pipeline(payload)
     return result.to_dict()
+
+
+@mcp.tool(
+    description=(
+        "Read-only EDGAR-OS codebase shortlist for a task. Returns CANDIDATE, "
+        "AMBIGUOUS, UNKNOWN, REVIEW_REQUIRED or BLOCKED with provenance. "
+        "A candidate is NOT verified canonical ownership or permission to write."
+    )
+)
+def prompt_forge_codebase(request: str) -> dict[str, Any]:
+    if not request or not request.strip():
+        raise ValueError("request must be non-empty")
+    return resolve_codebase(request)
 
 
 @mcp.tool(

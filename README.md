@@ -133,6 +133,12 @@ Prompt Forge 不要求每份輸出都塞滿所有欄位。**Complexity belongs i
 
 這代表 compiler/router、local HTTP 與 STDIO MCP 接線已有 executable implementation；**不代表 Prompt Forge 已是 public production service**。
 
+## Codebase 候選路由（EDG2-73）
+
+執行 `python -m prompt_forge route-codebase --request "修 Hermes 的 LINE approval 卡片"`，取得可檢查來源的候選 Repo；MCP 可用 `prompt_forge_codebase`，既有編譯結果包含 `route.codebase`。僅推薦候選，不能替代 YouTrack／GitHub／live 驗證，也不自動改碼或部署。
+
+詳細契約與測試情境：[`docs/CODEBASE-ROUTING.md`](docs/CODEBASE-ROUTING.md)。
+
 ## 驗證
 
 PR / `master` 會跑完整 unittest suite。v0.2 compiler/router regression cases 包含：

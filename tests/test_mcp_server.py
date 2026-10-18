@@ -40,7 +40,30 @@ class McpServerInProcessTests(unittest.IsolatedAsyncioTestCase):
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
             self.assertIn("prompt_forge_compile", names)
+            self.assertIn("prompt_forge_codebase", names)
             self.assertIn("prompt_forge_health", names)
+
+    async def test_codebase_tool_safe_route_and_ambiguity(self) -> None:
+        async with create_connected_server_and_client_session(prompt_forge_mcp) as session:
+            selected = await session.call_tool(
+                "prompt_forge_codebase", {"request": "修 Hermes 的 LINE approval 卡片"}
+            )
+            self.assertFalse(selected.isError)
+            self.assertEqual(selected.structuredContent["status"], "CANDIDATE")
+            self.assertEqual(
+                selected.structuredContent["primary_repo"], "edgarstool/hermes-agent"
+            )
+            ambiguous = await session.call_tool(
+                "prompt_forge_codebase", {"request": "改 EDGAR 控制中心"}
+            )
+            self.assertFalse(ambiguous.isError)
+            self.assertEqual(ambiguous.structuredContent["status"], "AMBIGUOUS")
+            self.assertIsNone(ambiguous.structuredContent["primary_repo"])
+            blocked = await session.call_tool(
+                "prompt_forge_codebase", {"request": "安裝 Ollama 本地模型"}
+            )
+            self.assertFalse(blocked.isError)
+            self.assertEqual(blocked.structuredContent["status"], "BLOCKED")
 
     async def test_health_tool_success(self) -> None:
         async with create_connected_server_and_client_session(prompt_forge_mcp) as session:
@@ -125,6 +148,7 @@ class McpServerStdioProcessTests(unittest.IsolatedAsyncioTestCase):
                 tools = await session.list_tools()
                 names = {tool.name for tool in tools.tools}
                 self.assertIn("prompt_forge_compile", names)
+                self.assertIn("prompt_forge_codebase", names)
                 self.assertIn("prompt_forge_health", names)
 
                 health = await session.call_tool("prompt_forge_health", {})

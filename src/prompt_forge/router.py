@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from .codebase_router import resolve_codebase
 from .schema import IntentResult, RiskResult, RouteResult, UserRequest
 
 # Default agent map for local validation. Not a product lock-in.
@@ -78,7 +79,7 @@ def route_request(
         )
 
     if task_type == "coding":
-        assumptions.append("Repository is already available to the selected agent.")
+        assumptions.append("Verify the repository identity, branch, working copy and write authority before coding.")
         if risk.requires_isolation:
             tools = list(dict.fromkeys(tools + ["git-branch"]))
             assumptions.append("Work on a feature branch; do not commit unrelated dirty files.")
@@ -90,6 +91,32 @@ def route_request(
     if task_type == "research":
         assumptions.append("Fresh web sources are required; cite dates and limits.")
 
+    # Read-only provisional source shortlist, not a canonical/production decision.
+    codebase = resolve_codebase(req.request)
+    state = codebase["status"]
+    if state == "CANDIDATE":
+        candidate = codebase["primary_repo"]
+        if not risk.forbid_external_secret_exfil:
+            tools = list(dict.fromkeys(tools + ["github-code-search"]))
+        assumptions.append(
+            f"Provisional codebase candidate: {candidate}; verify with YouTrack, "
+            "GitHub branch/PR and live runtime before modification."
+        )
+        rationale.append("codebase=provisional-candidate")
+    elif state == "AMBIGUOUS":
+        names = ", ".join(x["repo"] for x in codebase["candidates"])
+        assumptions.append(
+            f"AMBIGUOUS codebase: {names}; do not pick a repository for writes "
+            "until canonical owner is verified."
+        )
+        rationale.append("codebase=ambiguous")
+    elif state in {"BLOCKED", "REVIEW_REQUIRED"}:
+        assumptions.append(
+            f"Codebase routing {state}: {codebase['reason']}; no automated local-model "
+            "execution or unverified destructive change."
+        )
+        rationale.append(f"codebase={state.lower()}")
+
     # confidence blends intent confidence with risk certainty
     confidence = round(min(0.95, intent.confidence * (0.9 if risk.level == "high" else 1.0)), 2)
 
@@ -100,4 +127,5 @@ def route_request(
         confidence=confidence,
         assumptions=assumptions,
         rationale=rationale,
+        codebase=codebase,
     )
