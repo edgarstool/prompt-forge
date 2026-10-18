@@ -148,7 +148,7 @@ class McpServerStdioProcessTests(unittest.IsolatedAsyncioTestCase):
                 tools = await session.list_tools()
                 names = {tool.name for tool in tools.tools}
                 self.assertIn("prompt_forge_compile", names)
-            self.assertIn("prompt_forge_codebase", names)
+                self.assertIn("prompt_forge_codebase", names)
                 self.assertIn("prompt_forge_health", names)
 
                 health = await session.call_tool("prompt_forge_health", {})
