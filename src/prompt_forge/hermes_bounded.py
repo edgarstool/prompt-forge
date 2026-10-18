@@ -33,7 +33,8 @@ async def run_bounded_view(
 
     The owner might not acknowledge an interrupt. An accepted RPC is therefore
     INTERRUPT_REQUESTED rather than COMPLETED/CANCELLED. Do not reuse a session
-    or infer a session ID from a process list / log. A lost admission is UNKNOWN.
+    or infer a session ID from a process list / log. The fresh canary session
+    identity is known even when prompt.submit's admission receipt was lost.
     """
     if not 0 < timeout_seconds <= 600:
         raise ValueError("timeout_seconds must be between 0 and 600")
@@ -42,9 +43,8 @@ async def run_bounded_view(
         code = await asyncio.wait_for(view.run(prompt, oneshot=True), timeout_seconds)
         return {"status": "COMPLETED", "session_id": session, "exit_code": code}
     except asyncio.TimeoutError:
-        # A failed submit may have been admitted: do NOT invent a cancel target.
-        if not getattr(view, "finite_admission", None):
-            return {"status": "ADMISSION_UNKNOWN", "session_id": session}
+        # A submit ACK may be lost AFTER admission. This is a unique session
+        # created by our own canary, so interrupt only that known session.
         try:
             snapshot = await asyncio.wait_for(
                 client.rpc("session.resume", session_id=session), 5
