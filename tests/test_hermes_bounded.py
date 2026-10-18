@@ -31,7 +31,7 @@ class FakeClient:
     def __init__(self, *, refuse_interrupt=False, snapshot=None):
         self.calls = []
         self.refuse_interrupt = refuse_interrupt
-        self.snapshot = snapshot or {"execution_generation": 3}
+        self.snapshot = {"execution_generation": 3} if snapshot is None else snapshot
 
     async def rpc(self, method, **kwargs):
         self.calls.append((method, kwargs))
@@ -90,12 +90,15 @@ class BoundedCanaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["exit_code"], 0)
         self.assertFalse(client.calls)
 
-    async def test_no_admission_refuses_guess_and_does_not_interrupt(self):
+    async def test_no_receipt_still_interrupts_owned_fresh_session(self):
+        # The submit response can be lost after owner accepted the input.
+        # The session id was created specifically for this canary, not guessed.
         view = FakeView(delay=1, admission=None)
         client = FakeClient()
         result = await run_bounded_view(view, client, "verify", timeout_seconds=0.01)
-        self.assertEqual(result["status"], "ADMISSION_UNKNOWN")
-        self.assertFalse(client.calls)
+        self.assertEqual(result["status"], "INTERRUPT_REQUESTED")
+        self.assertEqual([method for method, _ in client.calls], ["session.resume", "session.interrupt"])
+        self.assertEqual(client.calls[-1][1]["session_id"], "fresh-one")
 
     async def test_refused_interrupt_cannot_be_called_cancelled(self):
         view = FakeView(delay=1)
