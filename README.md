@@ -139,6 +139,14 @@ Prompt Forge 不要求每份輸出都塞滿所有欄位。**Complexity belongs i
 
 詳細契約與測試情境：[`docs/CODEBASE-ROUTING.md`](docs/CODEBASE-ROUTING.md)。
 
+## Hermes 有界 Codebase 驗收（EDG2-73）
+
+- **日常查 Repo**：`python -m prompt_forge.hermes_bounded --request "改 EDGAR 控制中心"`，模糊結果直接回傳，不啟動模型。
+- **僅在驗收需要時**：加上 `--agent-canary --timeout 3`，使用既有 Hermes Gateway 的獨立 Session；逾時要求中止該 Session，必須讀回 Gateway 執行證據才算確認停止。
+- 本功能是自願使用的有界執行入口，**尚未更改所有 Hermes Session 的預設逾時語義**。
+
+詳細用法和真機收據：[`docs/BOUNDED-HERMES-CODEBASE.md`](docs/BOUNDED-HERMES-CODEBASE.md)。
+
 ## 驗證
 
 PR / `master` 會跑完整 unittest suite。v0.2 compiler/router regression cases 包含：
