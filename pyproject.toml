@@ -16,6 +16,7 @@ prompt-forge = "prompt_forge.cli:main"
 prompt-forge-service = "prompt_forge.service:main"
 edgar-os-prompt-forge = "prompt_forge.edgar_os:main"
 prompt-forge-mcp = "prompt_forge.mcp_server:main"
+prompt-forge-bounded-hermes = "prompt_forge.hermes_bounded:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
