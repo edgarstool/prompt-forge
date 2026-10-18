@@ -36,6 +36,8 @@ def _print_stage_summary(result) -> None:
         data["route"]["supporting_tools"],
         f"confidence={data['route']['confidence']}",
     )
+    print("codebase:", data["route"].get("codebase", {}).get("status", "UNKNOWN"),
+          data["route"].get("codebase", {}).get("primary_repo"))
     print(
         "context_policy.use_context7:",
         data["context_policy"]["use_context7"],
