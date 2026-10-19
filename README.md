@@ -123,6 +123,7 @@ Prompt Forge 不要求每份輸出都塞滿所有欄位。**Complexity belongs i
 | Semantic compiler / execution-mode router | ✅ 可用（v0.2 dev） |
 | Task-contract composer + evaluator | ✅ 可用 |
 | HTTP service (`127.0.0.1:8787`) | ✅ prototype，本機 |
+| Public HTTP prototype (`GET /health` + `POST /compile`) | ⚠️ adapter + deploy script 已備；公網 Function URL 需 profile `edgar` 部署後才可打 |
 | EDGAR-OS HTTP caller (`prompt_forge.edgar_os`) | ✅ 可用 |
 | STDIO MCP adapter (`prompt-forge-mcp`) | ✅ 可用，本機 STDIO |
 | GitHub Actions regression suite | ✅ PR / master CI |
