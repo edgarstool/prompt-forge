@@ -110,6 +110,28 @@ def _execution_steps(
     return "\n".join(steps)
 
 
+def _continuation_section(policy: str) -> str:
+    if policy == "SINGLE_CUT":
+        return ""
+
+    terminal = (
+        "Stop when the parent goal is verifiably reached or a real terminal gate is encountered."
+        if policy == "CONTINUE_UNTIL_GOAL"
+        else "Continue until a real human/authority/capability gate blocks the next safe cut or the parent goal is reached."
+    )
+
+    return (
+        f"Policy: `{policy}`.\n"
+        "After each bounded cut:\n"
+        "1. Verify the cut at the actual acceptance or consumption boundary.\n"
+        "2. Persist meaningful evidence and durable state transitions before moving on.\n"
+        "3. Reassess the parent goal. If it is still incomplete, choose the highest-value next bounded cut that remains inside the existing scope and authority.\n"
+        "4. Continue without asking the human for routine implementation decisions or ordinary diagnosable failures that can be repaired safely.\n"
+        f"5. {terminal}\n"
+        "Resource guard: continuation does not authorize unlimited paid resource use, new purchases, or scope expansion. Respect explicit budgets; if no paid budget was granted, do not infer one."
+    )
+
+
 def _lines(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
@@ -149,13 +171,15 @@ def compose_prompt(
             "- What changed / what was learned\n"
             "- Verification evidence\n"
             "- Remaining limitations or unresolved unknowns\n"
-            "- Next bounded action only when needed"
+            "- Terminal status and, for sustained execution, the real reason continuation stopped"
         ),
+        "Continuation Policy": _continuation_section(contract.continuation_policy),
         "Stop Conditions": (
             "Stop and report rather than improvising indefinitely when:\n"
             "- the required target cannot be identified or current evidence materially conflicts;\n"
             "- a new payment, identity/authority decision, irreversible destructive action, or force-push/history rewrite is required;\n"
-            "- required verification cannot be performed and success would otherwise be speculative."
+            "- required verification cannot be performed and success would otherwise be speculative.\n"
+            "Do not treat ordinary diagnosable build/test/API errors as terminal when they can be repaired safely inside scope."
         ),
         "Output Format": (
             "Return a concise completion receipt with outcome, evidence, limits, and write-back status. "
@@ -174,6 +198,7 @@ def compose_prompt(
         )
 
     ordered_keys = list(REQUIRED_PROMPT_SECTIONS) + [
+        "Continuation Policy",
         "Authority & Context",
         "Execution Freedom",
         "Evidence Return",
@@ -203,6 +228,7 @@ def compose_prompt(
         "risk_level": risk.level,
         "use_context7": ctx.use_context7,
         "execution_mode": decision.execution_mode,
+        "continuation_policy": contract.continuation_policy,
         "should_compile": decision.should_compile,
         "compile_reasons": decision.reasons,
         "truth_state": contract.truth_state,

@@ -38,6 +38,7 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertTrue(contract.goal)
         self.assertIn("observable", contract.acceptance.lower())
         self.assertIn("evidence", contract.evidence_return.lower())
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
 
     def test_browser_operator_mode_detected(self):
         decision, contract = self._compile(
@@ -84,6 +85,7 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertEqual(decision.execution_mode, "DIRECT")
         self.assertFalse(decision.should_compile)
         self.assertTrue(contract.goal)
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
 
     def test_semantic_slots_stay_distinct(self):
         decision, contract = self._compile(
@@ -96,6 +98,117 @@ class CompilerRouterTests(unittest.TestCase):
         self.assertNotEqual(contract.evidence, contract.constraints)
         self.assertEqual(contract.truth_state, "VERIFIED_CURRENT")
         self.assertIn("Do not change billing", contract.constraints)
+
+    def test_sustained_execution_is_orthogonal_to_build_mode(self):
+        decision, contract = self._compile(
+            {
+                "request": "持續把這個 repo 的 Auth 主線做下去，不要做一點就停，只有真的需要我授權才停。",
+                "preferred_agent": "warp",
+                "known_context": ["The repo and current auth work already exist."],
+            }
+        )
+        self.assertEqual(decision.execution_mode, "BUILD")
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_BLOCKED")
+        self.assertTrue(decision.should_compile)
+
+    def test_until_goal_request_uses_goal_horizon(self):
+        decision, contract = self._compile(
+            {
+                "request": "把這個 migration 做到完成為止；每一刀都驗證後繼續，直到整個目標完成。",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+        self.assertTrue(decision.should_compile)
+
+    def test_negated_english_continuation_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "Fix the first failing test, but do not keep working after the first step.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
+    def test_negated_chinese_continuation_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "只修第一個失敗測試，不要繼續做後面的工作。",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
+    def test_smart_apostrophe_negation_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "Fix the first failing test, but Don’t keep working after the first step.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
+    def test_ordinary_english_until_task_complete_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Continue working until the task is complete.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_ordinary_english_until_completion_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Work on it until completion.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_pronoun_it_until_done_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Continue until it is done.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_pronoun_contraction_until_finished_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Do not stop until it's finished.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_everything_until_done_uses_goal_horizon(self):
+        _, contract = self._compile(
+            {
+                "request": "Continue through every step until everything is done.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_continuation_question_does_not_collapse_to_direct(self):
+        decision, contract = self._compile(
+            {
+                "request": "Can you keep working until the task is complete?",
+            }
+        )
+        self.assertNotEqual(decision.execution_mode, "DIRECT")
+        self.assertTrue(decision.should_compile)
+        self.assertEqual(contract.continuation_policy, "CONTINUE_UNTIL_GOAL")
+
+    def test_negated_goal_completion_stays_single_cut(self):
+        _, contract = self._compile(
+            {
+                "request": "只修第一個失敗測試，不要做到整個目標完成為止。",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
+
+    def test_only_first_step_stays_single_cut_even_with_completion_words(self):
+        _, contract = self._compile(
+            {
+                "request": "Only do the first step; do not complete the whole task.",
+            }
+        )
+        self.assertEqual(contract.continuation_policy, "SINGLE_CUT")
 
 
 if __name__ == "__main__":
